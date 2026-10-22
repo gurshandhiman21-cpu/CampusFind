@@ -1,0 +1,28 @@
+# Java / Maven
+backend/target/
+**/target/
+
+# Local uploads and user-generated files
+backend/uploads/
+uploads/
+
+# Secrets and environment variables
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# IDE and operating system
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+test_photo.jpg
+bad.txt

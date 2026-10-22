@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Lost Items - CampusFind</title>
+
+    <link rel="stylesheet" href="../Css/style.css">
+
+</head>
+
+<body>
+
+    <!-- Navigation -->
+
+    <header>
+
+        <nav>
+
+            <h1>
+                <a href="../index.html">CampusFind</a>
+            </h1>
+
+            <ul>
+
+                <li>
+                    <a href="../index.html">Home</a>
+                </li>
+
+                <li>
+                    <a href="lost.html">Lost Items</a>
+                </li>
+
+                <li>
+                    <a href="found.html">Found Items</a>
+                </li>
+
+                <li>
+                    <a href="report.html">Report Item</a>
+                </li>
+
+            </ul>
+
+        </nav>
+
+    </header>
+
+
+    <!-- Main Content -->
+
+    <main>
+
+        <section class="items-section">
+
+            <div class="items-header">
+
+                <h2>Lost Items</h2>
+
+                <p>
+                    Browse items reported lost on campus.
+                </p>
+
+            </div>
+
+
+            <!-- Search and Filters -->
+
+            <div class="search-area">
+
+                <input type="search" id="searchInput" placeholder="Search lost items...">
+
+
+                <select id="categoryFilter">
+
+                    <option value="all">
+                        All Categories
+                    </option>
+
+                    <option value="electronics">
+                        Electronics
+                    </option>
+
+                    <option value="documents">
+                        Documents
+                    </option>
+
+                    <option value="books">
+                        Books
+                    </option>
+
+                    <option value="accessories">
+                        Accessories
+                    </option>
+
+                    <option value="clothing">
+                        Clothing
+                    </option>
+
+                    <option value="other">
+                        Other
+                    </option>
+
+                </select>
+
+
+                <select id="locationFilter">
+
+                    <option value="all">
+                        All Locations
+                    </option>
+
+                    <option value="library">
+                        Central Library
+                    </option>
+
+                    <option value="canteen">
+                        Canteen
+                    </option>
+
+                    <option value="block-a">
+                        Block A
+                    </option>
+
+                    <option value="block-b">
+                        Block B
+                    </option>
+
+                    <option value="hostel">
+                        Hostel
+                    </option>
+
+                    <option value="sports">
+                        Sports Ground
+                    </option>
+
+                    <option value="parking">
+                        Parking
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- Items -->
+
+            <div id="lostItemsContainer" class="items-grid">
+
+                <!-- JavaScript will add items here -->
+
+            </div>
+
+
+            <!-- No Results -->
+
+            <p id="noResults" class="no-results" style="display: none;">
+                No lost items found.
+            </p>
+
+        </section>
+
+    </main>
+
+
+    <!-- Footer -->
+
+    <footer>
+
+        <p>
+            &copy; 2026 CampusFind. All rights reserved.
+        </p>
+
+    </footer>
+
+
+    <script src="../js/api.js"></script>
+    <script src="../js/script.js"></script>
+
+</body>
+
+</html>
