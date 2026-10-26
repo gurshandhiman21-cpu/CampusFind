@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Claims - CampusFind</title>
+    <link rel="stylesheet" href="../Css/style.css">
+</head>
+<body>
+
+    <!-- Navigation -->
+    <header>
+        <nav>
+            <h1>
+                <a href="../index.html">CampusFind</a>
+            </h1>
+            <ul id="navLinks">
+                <li><a href="../index.html">Home</a></li>
+                <li><a href="lost.html">Lost Items</a></li>
+                <li><a href="found.html">Found Items</a></li>
+                <li><a href="report.html">Report Item</a></li>
+                <li><a href="my-claims.html" class="active-nav">My Claims</a></li>
+                <li class="auth-link"><a href="login.html">Login</a></li>
+                <li class="auth-link"><a href="register.html">Register</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <section class="my-claims-section">
+            <div class="section-header">
+                <h2>My Submitted Claims</h2>
+                <p>Track the verification and recovery status of items you have claimed.</p>
+            </div>
+
+            <!-- Global Alert Container -->
+            <div id="claimsAlert" class="auth-alert" style="display: none;"></div>
+
+            <!-- Loading State -->
+            <div id="claimsLoading" style="text-align: center; padding: 60px; color: #666;">
+                <p>Loading your claims from server...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyClaims" class="no-results" style="display: none;">
+                <h3>No Claims Submitted Yet</h3>
+                <p>You haven't submitted ownership claims on any found items.</p>
+                <a href="found.html" class="view-item-button">Browse Found Items</a>
+            </div>
+
+            <!-- Claims List Container -->
+            <div id="myClaimsContainer" class="my-claims-grid" style="display: none;">
+                <!-- Dynamically populated by js/script.js -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2026 CampusFind. All rights reserved.</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="../js/api.js"></script>
+    <script src="../js/script.js"></script>
+</body>
+</html>

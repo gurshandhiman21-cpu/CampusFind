@@ -518,3 +518,249 @@ describe('CampusFind Frontend Authentication Verification', () => {
         assert.equal(uploadReq.options.headers['X-CSRF-TOKEN'], 'img-csrf-token');
     });
 });
+
+describe('CampusFind Phase 8B.3 — Claims & Recovery Frontend Integration Verification', () => {
+
+    const rootDir = path.resolve(__dirname, '..');
+    const apiJsPath = path.join(rootDir, 'js', 'api.js');
+    const scriptJsPath = path.join(rootDir, 'js', 'script.js');
+    const myClaimsHtmlPath = path.join(rootDir, 'pages', 'my-claims.html');
+
+    test('1. HTML structure: pages/my-claims.html layout, navigation, and state containers', () => {
+        assert.ok(fs.existsSync(myClaimsHtmlPath), 'pages/my-claims.html must exist');
+        const content = fs.readFileSync(myClaimsHtmlPath, 'utf8');
+
+        assert.ok(content.includes('id="navLinks"'), 'my-claims.html must contain navigation links');
+        assert.ok(content.includes('id="myClaimsContainer"'), 'my-claims.html must contain #myClaimsContainer');
+        assert.ok(content.includes('id="claimsLoading"'), 'my-claims.html must contain #claimsLoading');
+        assert.ok(content.includes('id="emptyClaims"'), 'my-claims.html must contain #emptyClaims');
+        assert.ok(content.includes('id="claimsAlert"'), 'my-claims.html must contain #claimsAlert');
+        assert.ok(content.includes('href="../Css/style.css"'), 'my-claims.html must reference style.css');
+        assert.ok(content.includes('src="../js/api.js"'), 'my-claims.html must load api.js');
+        assert.ok(content.includes('src="../js/script.js"'), 'my-claims.html must load script.js');
+    });
+
+    test('2. API Client: All 8 Phase 8B.3 claim and recovery functions exist on CampusFindAPI', () => {
+        global.window = {};
+        eval(fs.readFileSync(apiJsPath, 'utf8'));
+        const API = global.window.CampusFindAPI;
+
+        assert.equal(typeof API.submitClaim, 'function', 'submitClaim must be defined');
+        assert.equal(typeof API.getMyClaims, 'function', 'getMyClaims must be defined');
+        assert.equal(typeof API.getClaimById, 'function', 'getClaimById must be defined');
+        assert.equal(typeof API.getReportClaims, 'function', 'getReportClaims must be defined');
+        assert.equal(typeof API.reviewClaim, 'function', 'reviewClaim must be defined');
+        assert.equal(typeof API.withdrawClaim, 'function', 'withdrawClaim must be defined');
+        assert.equal(typeof API.recordRecovery, 'function', 'recordRecovery must be defined');
+        assert.equal(typeof API.getRecovery, 'function', 'getRecovery must be defined');
+    });
+
+    test('3. API Client: submitClaim validates input, attaches CSRF, and calls POST /api/reports/:id/claims', async () => {
+        const fetchCalls = [];
+        global.window = {};
+        global.fetch = async (url, options = {}) => {
+            fetchCalls.push({ url, options });
+            if (url.endsWith('/auth/csrf')) {
+                return {
+                    ok: true, status: 200,
+                    headers: new Map([['content-type', 'application/json']]),
+                    json: async () => ({ token: 'csrf-claim-token', headerName: 'X-CSRF-TOKEN' })
+                };
+            }
+            if (url.includes('/claims')) {
+                return {
+                    ok: true, status: 201,
+                    headers: new Map([['content-type', 'application/json']]),
+                    json: async () => ({ id: 42, status: 'PENDING' })
+                };
+            }
+            return { ok: true, status: 200, headers: new Map(), json: async () => ({}) };
+        };
+
+        eval(fs.readFileSync(apiJsPath, 'utf8'));
+        const API = global.window.CampusFindAPI;
+
+        // Validation rejection tests
+        await assert.rejects(async () => {
+            await API.submitClaim('FND-1', { explanation: 'short', verificationDetails: 'Secret details here' });
+        }, /Explanation must be between 10 and 2000 characters/);
+
+        await assert.rejects(async () => {
+            await API.submitClaim('FND-1', { explanation: 'This is my calculator lost on Monday', verificationDetails: 'tiny' });
+        }, /Verification proof must be between 5 and 2000 characters/);
+
+        // Valid claim submission
+        const res = await API.submitClaim('FND-123', {
+            explanation: 'I left my black umbrella on the library 2nd floor desk',
+            verificationDetails: 'Has a broken rib and yellow tape on the handle'
+        });
+
+        assert.equal(res.id, 42);
+        const submitReq = fetchCalls.find(c => c.url.includes('/api/reports/FND-123/claims'));
+        assert.ok(submitReq, 'Must dispatch request to report claims endpoint');
+        assert.equal(submitReq.options.method, 'POST');
+        assert.equal(submitReq.options.credentials, 'include');
+        assert.equal(submitReq.options.headers['X-CSRF-TOKEN'], 'csrf-claim-token');
+    });
+
+    test('4. API Client: Claims retrieval endpoints use GET with credentials: "include"', async () => {
+        const fetchCalls = [];
+        global.window = {};
+        global.fetch = async (url, options = {}) => {
+            fetchCalls.push({ url, options });
+            return {
+                ok: true, status: 200,
+                headers: new Map([['content-type', 'application/json']]),
+                json: async () => [{ id: 1, status: 'PENDING' }]
+            };
+        };
+
+        eval(fs.readFileSync(apiJsPath, 'utf8'));
+        const API = global.window.CampusFindAPI;
+
+        await API.getMyClaims();
+        const myClaimsReq = fetchCalls.find(c => c.url.endsWith('/api/claims/my'));
+        assert.ok(myClaimsReq, 'getMyClaims must target /api/claims/my');
+        assert.equal(myClaimsReq.options.method, 'GET');
+        assert.equal(myClaimsReq.options.credentials, 'include');
+
+        await API.getClaimById(55);
+        const claimByIdReq = fetchCalls.find(c => c.url.endsWith('/api/claims/55'));
+        assert.ok(claimByIdReq, 'getClaimById must target /api/claims/55');
+        assert.equal(claimByIdReq.options.method, 'GET');
+        assert.equal(claimByIdReq.options.credentials, 'include');
+
+        await API.getReportClaims('FND-999');
+        const reportClaimsReq = fetchCalls.find(c => c.url.endsWith('/api/reports/FND-999/claims'));
+        assert.ok(reportClaimsReq, 'getReportClaims must target /api/reports/FND-999/claims');
+        assert.equal(reportClaimsReq.options.method, 'GET');
+        assert.equal(reportClaimsReq.options.credentials, 'include');
+    });
+
+    test('5. API Client: reviewClaim and withdrawClaim use PATCH with CSRF token', async () => {
+        const fetchCalls = [];
+        global.window = {};
+        global.fetch = async (url, options = {}) => {
+            fetchCalls.push({ url, options });
+            if (url.endsWith('/auth/csrf')) {
+                return {
+                    ok: true, status: 200,
+                    headers: new Map([['content-type', 'application/json']]),
+                    json: async () => ({ token: 'patch-csrf-token', headerName: 'X-CSRF-TOKEN' })
+                };
+            }
+            return {
+                ok: true, status: 200,
+                headers: new Map([['content-type', 'application/json']]),
+                json: async () => ({ id: 77, status: 'APPROVED' })
+            };
+        };
+
+        eval(fs.readFileSync(apiJsPath, 'utf8'));
+        const API = global.window.CampusFindAPI;
+
+        // reviewClaim rejection test
+        await assert.rejects(async () => {
+            await API.reviewClaim(77, { status: 'INVALID_STATUS' });
+        }, /Status must be either APPROVED or REJECTED/);
+
+        // Valid review
+        await API.reviewClaim(77, { status: 'APPROVED', reviewNotes: 'ID verified' });
+        const reviewReq = fetchCalls.find(c => c.url.endsWith('/api/claims/77/review'));
+        assert.ok(reviewReq, 'reviewClaim must call PATCH /api/claims/77/review');
+        assert.equal(reviewReq.options.method, 'PATCH');
+        assert.equal(reviewReq.options.headers['X-CSRF-TOKEN'], 'patch-csrf-token');
+        assert.equal(reviewReq.options.credentials, 'include');
+
+        // withdrawClaim
+        await API.withdrawClaim(77);
+        const withdrawReq = fetchCalls.find(c => c.url.endsWith('/api/claims/77/withdraw'));
+        assert.ok(withdrawReq, 'withdrawClaim must call PATCH /api/claims/77/withdraw');
+        assert.equal(withdrawReq.options.method, 'PATCH');
+        assert.equal(withdrawReq.options.headers['X-CSRF-TOKEN'], 'patch-csrf-token');
+        assert.equal(withdrawReq.options.credentials, 'include');
+    });
+
+    test('6. API Client: Recovery endpoints (recordRecovery and getRecovery)', async () => {
+        const fetchCalls = [];
+        global.window = {};
+        global.fetch = async (url, options = {}) => {
+            fetchCalls.push({ url, options });
+            if (url.endsWith('/auth/csrf')) {
+                return {
+                    ok: true, status: 200,
+                    headers: new Map([['content-type', 'application/json']]),
+                    json: async () => ({ token: 'rec-csrf-token', headerName: 'X-CSRF-TOKEN' })
+                };
+            }
+            return {
+                ok: true, status: 200,
+                headers: new Map([['content-type', 'application/json']]),
+                json: async () => ({ id: 10, recoveryDate: '2026-10-26' })
+            };
+        };
+
+        eval(fs.readFileSync(apiJsPath, 'utf8'));
+        const API = global.window.CampusFindAPI;
+
+        // Validation rejection tests
+        await assert.rejects(async () => {
+            await API.recordRecovery('FND-55', { recoveryDate: '2026-10-26' }); // missing claimId
+        }, /claimId is required to record recovery/);
+
+        await assert.rejects(async () => {
+            await API.recordRecovery('FND-55', { claimId: 10 }); // missing recoveryDate
+        }, /recoveryDate is required to record recovery/);
+
+        // Valid recovery creation
+        await API.recordRecovery('FND-55', {
+            claimId: 10,
+            recoveryDate: '2026-10-26',
+            notes: 'Handed over at front desk'
+        });
+
+        const recCreateReq = fetchCalls.find(c => c.url.endsWith('/api/reports/FND-55/recovery') && c.options.method === 'POST');
+        assert.ok(recCreateReq, 'recordRecovery must POST to /api/reports/:id/recovery');
+        assert.equal(recCreateReq.options.headers['X-CSRF-TOKEN'], 'rec-csrf-token');
+        assert.equal(recCreateReq.options.credentials, 'include');
+
+        // Valid recovery retrieval
+        await API.getRecovery('FND-55');
+        const recGetReq = fetchCalls.find(c => c.url.endsWith('/api/reports/FND-55/recovery') && c.options.method === 'GET');
+        assert.ok(recGetReq, 'getRecovery must GET from /api/reports/:id/recovery');
+        assert.equal(recGetReq.options.credentials, 'include');
+    });
+
+    test('7. Security: Frontend escapeHTML and XSS prevention for user-controlled claim content', () => {
+        const scriptCode = fs.readFileSync(scriptJsPath, 'utf8');
+
+        // Verify escapeHTML function existence
+        assert.ok(scriptCode.includes('function escapeHTML('), 'script.js must define escapeHTML function');
+
+        // Verify user inputs are properly escaped before template interpolation
+        assert.ok(scriptCode.includes('escapeHTML(claim.explanation)'), 'claim explanation must be escaped');
+        assert.ok(scriptCode.includes('escapeHTML(claim.verificationDetails)'), 'verificationDetails must be escaped');
+        assert.ok(scriptCode.includes('escapeHTML(claim.reviewNotes)'), 'reviewNotes must be escaped');
+        assert.ok(scriptCode.includes('escapeHTML(recovery.notes)'), 'recovery notes must be escaped');
+        assert.ok(scriptCode.includes('escapeHTML(claim.claimantName'), 'claimant name must be escaped');
+    });
+
+    test('8. UI Helpers: Claim status badge helper formatClaimBadge handles all statuses', () => {
+        // Test status mapping from script.js
+        const scriptCode = fs.readFileSync(scriptJsPath, 'utf8');
+        assert.ok(scriptCode.includes('function formatClaimBadge('), 'formatClaimBadge helper must exist');
+
+        const testStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN', 'RECOVERED'];
+        for (const st of testStatuses) {
+            assert.ok(scriptCode.includes(st), `formatClaimBadge must support ${st}`);
+        }
+    });
+
+    test('9. Accessibility: showModal creates keyboard-friendly dialog with Escape support', () => {
+        const scriptCode = fs.readFileSync(scriptJsPath, 'utf8');
+        assert.ok(scriptCode.includes('function showModal('), 'showModal helper must exist');
+        assert.ok(scriptCode.includes('"role", "dialog"') || scriptCode.includes('role="dialog"'), 'showModal must set role="dialog"');
+        assert.ok(scriptCode.includes('"aria-modal", "true"') || scriptCode.includes('aria-modal="true"'), 'showModal must set aria-modal="true"');
+        assert.ok(scriptCode.includes('e.key === "Escape"'), 'showModal must handle Escape key');
+    });
+});

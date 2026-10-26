@@ -47,6 +47,88 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+/**
+ * Formats a claim status into an accessible HTML badge.
+ * @param {string} status
+ * @returns {string}
+ */
+function formatClaimBadge(status) {
+    const s = String(status || '').toUpperCase();
+    const map = {
+        'PENDING': '<span class="claim-badge pending">⏳ Pending Review</span>',
+        'APPROVED': '<span class="claim-badge approved">✅ Approved</span>',
+        'REJECTED': '<span class="claim-badge rejected">❌ Rejected</span>',
+        'WITHDRAWN': '<span class="claim-badge withdrawn">⚪ Withdrawn</span>',
+        'RECOVERED': '<span class="claim-badge recovered">🎉 Recovered</span>'
+    };
+    return map[s] || `<span class="claim-badge">${escapeHTML(s)}</span>`;
+}
+
+/**
+ * Displays an accessible, keyboard-friendly modal dialog.
+ * @param {{ title: string, bodyHtml: string, confirmText?: string, confirmClass?: string, onConfirm?: Function }} options
+ */
+function showModal({ title, bodyHtml, confirmText, confirmClass, onConfirm }) {
+    const existing = document.getElementById("activeModalBackdrop");
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "activeModalBackdrop";
+    backdrop.className = "modal-backdrop";
+    backdrop.setAttribute("role", "dialog");
+    backdrop.setAttribute("aria-modal", "true");
+
+    backdrop.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>${escapeHTML(title)}</h3>
+                <button type="button" class="modal-close-btn" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                ${bodyHtml}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-withdraw modal-cancel-btn">Cancel</button>
+                ${confirmText ? `<button type="button" class="${confirmClass || 'btn-primary-action'} modal-confirm-btn">${escapeHTML(confirmText)}</button>` : ''}
+            </div>
+        </div>
+    `;
+
+    function closeModal() {
+        document.removeEventListener("keydown", onKeyDown);
+        backdrop.remove();
+    }
+
+    function onKeyDown(e) {
+        if (e.key === "Escape") {
+            closeModal();
+        }
+    }
+
+    backdrop.querySelector(".modal-close-btn").addEventListener("click", closeModal);
+    backdrop.querySelector(".modal-cancel-btn").addEventListener("click", closeModal);
+    backdrop.addEventListener("click", function (e) {
+        if (e.target === backdrop) closeModal();
+    });
+
+    const confirmBtn = backdrop.querySelector(".modal-confirm-btn");
+    if (confirmBtn && onConfirm) {
+        confirmBtn.addEventListener("click", async function () {
+            await onConfirm(backdrop, closeModal);
+        });
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    document.body.appendChild(backdrop);
+
+    const firstInput = backdrop.querySelector("input, textarea, select");
+    if (firstInput) {
+        firstInput.focus();
+    } else if (confirmBtn) {
+        confirmBtn.focus();
+    }
+}
+
 
 // =============================================================================
 // 1. REPORT FORM PAGE (pages/report.html)
@@ -492,6 +574,111 @@ if (foundItemsContainer) {
 
 
 // =============================================================================
+// MODAL & CLAIM UI HELPERS
+// =============================================================================
+
+/**
+ * Returns formatted HTML for claim status badges.
+ * @param {string} status - PENDING, APPROVED, REJECTED, WITHDRAWN, RECOVERED
+ * @returns {string} Badge HTML
+ */
+function formatClaimBadge(status) {
+    const s = (status || "").toUpperCase();
+    switch (s) {
+        case "PENDING":
+            return '<span class="claim-badge pending">⏳ Pending Review</span>';
+        case "APPROVED":
+            return '<span class="claim-badge approved">✅ Approved</span>';
+        case "REJECTED":
+            return '<span class="claim-badge rejected">❌ Rejected</span>';
+        case "WITHDRAWN":
+            return '<span class="claim-badge withdrawn">↩️ Withdrawn</span>';
+        case "RECOVERED":
+            return '<span class="claim-badge recovered">🎉 Handover Completed</span>';
+        default:
+            return `<span class="claim-badge">${escapeHTML(s)}</span>`;
+    }
+}
+
+/**
+ * Renders an accessible modal dialog with backdrop, escape key support, and focus management.
+ * @param {object} options
+ * @param {string} options.title
+ * @param {string} options.bodyHtml
+ * @param {string} [options.confirmText="Confirm"]
+ * @param {string} [options.confirmClass="btn-primary-action"]
+ * @param {function} options.onConfirm - Callback passed (backdrop, closeModal)
+ */
+function showModal({ title, bodyHtml, confirmText = "Confirm", confirmClass = "btn-primary-action", onConfirm }) {
+    const existingModal = document.querySelector(".modal-backdrop");
+    if (existingModal) existingModal.remove();
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.setAttribute("role", "dialog");
+    backdrop.setAttribute("aria-modal", "true");
+    backdrop.setAttribute("aria-labelledby", "modalDialogTitle");
+
+    backdrop.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="modalDialogTitle">${escapeHTML(title)}</h3>
+                <button type="button" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                ${bodyHtml}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-cancel-btn">Cancel</button>
+                <button type="button" class="modal-confirm-btn ${confirmClass}">${escapeHTML(confirmText)}</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    const closeBtn = backdrop.querySelector(".modal-close");
+    const cancelBtn = backdrop.querySelector(".modal-cancel-btn");
+    const confirmBtn = backdrop.querySelector(".modal-confirm-btn");
+
+    function closeModal() {
+        document.removeEventListener("keydown", handleKeydown);
+        backdrop.remove();
+    }
+
+    function handleKeydown(e) {
+        if (e.key === "Escape") {
+            closeModal();
+        }
+    }
+
+    document.addEventListener("keydown", handleKeydown);
+
+    backdrop.addEventListener("click", function (e) {
+        if (e.target === backdrop) closeModal();
+    });
+
+    closeBtn.addEventListener("click", closeModal);
+    cancelBtn.addEventListener("click", closeModal);
+
+    if (typeof onConfirm === "function") {
+        confirmBtn.addEventListener("click", function () {
+            confirmBtn.disabled = true;
+            onConfirm(backdrop, closeModal);
+        });
+    }
+
+    // Auto-focus first input or confirm button
+    const firstInput = backdrop.querySelector("input, textarea, select");
+    if (firstInput) {
+        firstInput.focus();
+    } else {
+        confirmBtn.focus();
+    }
+}
+
+
+// =============================================================================
 // 4. ITEM DETAILS PAGE (pages/item.html)
 // =============================================================================
 
@@ -510,21 +697,39 @@ if (itemDetailsContainer) {
             </div>
         `;
     } else {
-        // Show loading indicator
-        itemDetailsContainer.innerHTML = `
-            <div style="text-align: center; padding: 60px; color: #666;">
-                <p>Loading item details from server...</p>
-            </div>
-        `;
+        async function loadAndRenderItemDetails() {
+            itemDetailsContainer.innerHTML = `
+                <div style="text-align: center; padding: 60px; color: #666;">
+                    <p>Loading item details from server...</p>
+                </div>
+            `;
 
-        (async function () {
             try {
                 // Fetch report by public reportId
                 const report = await window.CampusFindAPI.getReportById(reportId);
 
+                // Fetch current user (if logged in)
+                let currentUser = null;
+                try {
+                    currentUser = await window.CampusFindAPI.getCurrentUser();
+                } catch (e) {
+                    // Guest user
+                }
+
                 const isLost = (report.type || "").toUpperCase() === "LOST";
-                const statusClass = isLost ? "lost" : "found";
-                const statusBadgeText = isLost ? "🔴 LOST" : "🟢 FOUND";
+                const isRecovered = (report.status || "").toUpperCase() === "RECOVERED";
+                const isClaimPending = (report.status || "").toUpperCase() === "CLAIM_PENDING";
+
+                let statusClass = isLost ? "lost" : "found";
+                let statusBadgeText = isLost ? "🔴 LOST" : "🟢 FOUND";
+
+                if (isRecovered) {
+                    statusClass = "recovered";
+                    statusBadgeText = "🎉 RECOVERED";
+                } else if (isClaimPending) {
+                    statusClass = "found";
+                    statusBadgeText = "⏳ CLAIM PENDING";
+                }
 
                 const resolvedUrl = window.CampusFindAPI.resolveImageUrl(report.imageUrl);
                 const imageHtml = resolvedUrl
@@ -540,6 +745,227 @@ if (itemDetailsContainer) {
                       `
                     : "";
 
+                // Build recovery receipt section if recovered
+                let recoveryReceiptHtml = "";
+                if (isRecovered) {
+                    try {
+                        const recovery = await window.CampusFindAPI.getRecovery(report.reportId);
+                        if (recovery) {
+                            recoveryReceiptHtml = `
+                                <div class="recovery-receipt-card">
+                                    <h3>✅ Verified Handover Receipt</h3>
+                                    <p><strong>Handover Date:</strong> ${escapeHTML(recovery.recoveryDate || "Completed")}</p>
+                                    <p><strong>Recorded By:</strong> ${escapeHTML(recovery.recordedByName || "Finder / Campus Staff")}</p>
+                                    ${recovery.notes ? `<p><strong>Handover Notes:</strong> ${escapeHTML(recovery.notes)}</p>` : ""}
+                                </div>
+                            `;
+                        }
+                    } catch (e) {
+                        recoveryReceiptHtml = `
+                            <div class="recovery-receipt-card">
+                                <h3>✅ Item Recovered</h3>
+                                <p>This item has been successfully recovered and returned to its owner.</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Build Claims & Recovery Section (only for FOUND items)
+                let claimWorkflowHtml = "";
+                if (!isLost && !isRecovered) {
+                    if (!currentUser) {
+                        // Guest: Prompt to log in
+                        const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+                        claimWorkflowHtml = `
+                            <div class="claim-section">
+                                <div class="claim-card" style="text-align: center;">
+                                    <h3>Is this item yours?</h3>
+                                    <p>Log in with your campus account to submit an ownership claim and verify your ownership with the finder.</p>
+                                    <a href="login.html?redirect=${returnUrl}" class="btn-primary-action" style="margin-top: 10px;">
+                                        Log In to Claim This Item
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // User is authenticated. Determine role on this report:
+                        // Try getReportClaims. If 200 OK -> user is finder or staff/admin. If 403 -> user is claimant.
+                        let reportClaims = null;
+                        try {
+                            reportClaims = await window.CampusFindAPI.getReportClaims(report.reportId);
+                        } catch (claimsErr) {
+                            // 403 Forbidden: User is not finder/staff -> regular claimant
+                            reportClaims = null;
+                        }
+
+                        if (reportClaims !== null) {
+                            // --- FINDER / REVIEWER VIEW ---
+                            const approvedClaim = reportClaims.find(c => c.status === "APPROVED");
+                            let claimsListHtml = "";
+
+                            if (reportClaims.length === 0) {
+                                claimsListHtml = `
+                                    <p style="color: #6b7280; font-size: 14px; margin-top: 10px;">
+                                        No ownership claims have been submitted for this found item yet. Once students submit claims, they will appear here for your review.
+                                    </p>
+                                `;
+                            } else {
+                                claimsListHtml = `
+                                    <div class="claims-management-list">
+                                        ${reportClaims.map(claim => {
+                                            const isPending = claim.status === "PENDING";
+                                            const isApproved = claim.status === "APPROVED";
+                                            return `
+                                                <div class="claim-review-item" data-claim-id="${claim.id}">
+                                                    <div class="claim-header">
+                                                        <div>
+                                                            <strong>${escapeHTML(claim.claimantName || "Student")}</strong>
+                                                            ${claim.claimantEmail ? `<span style="color: #6b7280; font-size: 13px;"> (${escapeHTML(claim.claimantEmail)})</span>` : ""}
+                                                            <div style="font-size: 12px; color: #9ca3af;">Submitted on ${escapeHTML(new Date(claim.createdAt).toLocaleDateString())}</div>
+                                                        </div>
+                                                        <div>
+                                                            ${formatClaimBadge(claim.status)}
+                                                        </div>
+                                                    </div>
+                                                    <div style="font-size: 14px; color: #374151; margin-bottom: 8px;">
+                                                        <strong>Explanation:</strong> ${escapeHTML(claim.explanation)}
+                                                    </div>
+                                                    ${claim.verificationDetails ? `
+                                                        <div class="claim-confidential-box">
+                                                            <strong>🔒 Confidential Proof:</strong>
+                                                            <p style="margin-top: 4px; color: #78350f;">${escapeHTML(claim.verificationDetails)}</p>
+                                                        </div>
+                                                    ` : ""}
+                                                    ${claim.reviewNotes ? `
+                                                        <div style="font-size: 13px; color: #4b5563; background: #f3f4f6; padding: 8px; border-radius: 4px; margin-top: 8px;">
+                                                            <strong>Review Notes:</strong> ${escapeHTML(claim.reviewNotes)}
+                                                        </div>
+                                                    ` : ""}
+                                                    ${isPending ? `
+                                                        <div class="claim-review-actions">
+                                                            <button type="button" class="btn-approve review-approve-btn" data-claim-id="${claim.id}" data-claimant="${escapeHTML(claim.claimantName || "Student")}">
+                                                                Approve Claim
+                                                            </button>
+                                                            <button type="button" class="btn-reject review-reject-btn" data-claim-id="${claim.id}" data-claimant="${escapeHTML(claim.claimantName || "Student")}">
+                                                                Reject Claim
+                                                            </button>
+                                                        </div>
+                                                    ` : ""}
+                                                </div>
+                                            `;
+                                        }).join("")}
+                                    </div>
+                                `;
+                            }
+
+                            const recoveryActionBanner = approvedClaim ? `
+                                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 18px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap: 15px;">
+                                    <div>
+                                        <h4 style="color: #1e429f; margin-bottom: 4px;">Verified Claim Approved</h4>
+                                        <p style="color: #1d4ed8; font-size: 13.5px; margin: 0;">Claim for <strong>${escapeHTML(approvedClaim.claimantName || "Claimant")}</strong> is approved. Record physical handover when the item is collected.</p>
+                                    </div>
+                                    <button type="button" id="openRecoveryModalBtn" class="btn-recovery" style="white-space: nowrap;">
+                                        Record Physical Handover &rarr;
+                                    </button>
+                                </div>
+                            ` : "";
+
+                            claimWorkflowHtml = `
+                                <div class="claim-section">
+                                    <div class="claim-card">
+                                        <h3>Claims Management (Finder Review)</h3>
+                                        <p>Review ownership claims submitted by students who lost this item. Examine their confidential proof to verify genuine ownership.</p>
+                                        ${recoveryActionBanner}
+                                        ${claimsListHtml}
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            // --- REGULAR STUDENT / CLAIMANT VIEW ---
+                            let myClaims = [];
+                            try {
+                                myClaims = await window.CampusFindAPI.getMyClaims();
+                            } catch (e) {
+                                myClaims = [];
+                            }
+
+                            const myClaim = myClaims.find(c => c.reportPublicId === report.reportId || c.reportId === report.id);
+
+                            if (myClaim) {
+                                // User already has a claim on this item
+                                const isPending = myClaim.status === "PENDING";
+                                const isApproved = myClaim.status === "APPROVED";
+                                const isRejected = myClaim.status === "REJECTED";
+
+                                claimWorkflowHtml = `
+                                    <div class="claim-section">
+                                        <div class="claim-card">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                                <h3>Your Ownership Claim</h3>
+                                                <div>${formatClaimBadge(myClaim.status)}</div>
+                                            </div>
+                                            <p style="font-size: 13px; color: #6b7280;">Submitted on ${escapeHTML(new Date(myClaim.createdAt).toLocaleDateString())}</p>
+                                            <div class="claim-body" style="background: #f9fafb; padding: 14px; border-radius: 8px; margin-top: 10px;">
+                                                <p><strong>Your Explanation:</strong> ${escapeHTML(myClaim.explanation)}</p>
+                                                ${myClaim.verificationDetails ? `<p style="margin-top: 8px;"><strong>Your Confidential Proof:</strong> ${escapeHTML(myClaim.verificationDetails)}</p>` : ""}
+                                                ${myClaim.reviewNotes ? `
+                                                    <div style="margin-top: 10px; font-size: 13.5px; color: #4b5563; background: #e5e7eb; padding: 10px; border-radius: 6px;">
+                                                        <strong>Finder Notes:</strong> ${escapeHTML(myClaim.reviewNotes)}
+                                                    </div>
+                                                ` : ""}
+                                            </div>
+                                            ${isApproved ? `
+                                                <div style="margin-top: 14px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 12px; border-radius: 6px; color: #065f46; font-size: 14px;">
+                                                    🎉 <strong>Your claim has been approved!</strong> Coordinate with the finder or visit the campus reception to collect your item.
+                                                </div>
+                                            ` : ""}
+                                            ${isRejected ? `
+                                                <div style="margin-top: 14px; background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 6px; color: #991b1b; font-size: 14px;">
+                                                    Your claim was not approved by the finder.
+                                                </div>
+                                            ` : ""}
+                                            ${isPending ? `
+                                                <div style="margin-top: 16px;">
+                                                    <button type="button" id="withdrawMyClaimBtn" class="btn-withdraw">
+                                                        Withdraw My Claim
+                                                    </button>
+                                                </div>
+                                            ` : ""}
+                                        </div>
+                                    </div>
+                                `;
+                            } else {
+                                // User has not submitted a claim on this report yet
+                                claimWorkflowHtml = `
+                                    <div class="claim-section">
+                                        <div class="claim-card">
+                                            <h3>Claim This Item</h3>
+                                            <p>If this found item belongs to you, provide proof of ownership so the finder can verify your identity.</p>
+                                            <form id="claimSubmitForm" class="claim-form">
+                                                <div id="claimFormAlert" class="auth-alert" style="display: none;"></div>
+                                                <div class="form-group">
+                                                    <label for="claimExplanation">Why is this your item? *</label>
+                                                    <p class="field-hint">Describe circumstances, where/when you lost it, or general identifying features (10–2000 characters).</p>
+                                                    <textarea id="claimExplanation" rows="3" required placeholder="e.g. I left my black calculator in the library 2nd floor study room after my exam on Monday."></textarea>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="claimVerification">Confidential Verification Details *</label>
+                                                    <p class="field-hint"><strong>🔒 Private to finder & admin:</strong> Specific proof only the true owner would know (e.g. serial number, lockscreen wallpaper, engravings, secret scratches, exact contents) (5–2000 characters).</p>
+                                                    <textarea id="claimVerification" rows="3" required placeholder="e.g. Serial number starts with C02; has a small smiley sticker inside the protective slide case."></textarea>
+                                                </div>
+                                                <button type="submit" id="submitClaimBtn" class="btn-claim">
+                                                    Submit Ownership Claim
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }
+                    }
+                }
+
+                // Render Main Card
                 itemDetailsContainer.innerHTML = `
                     <div class="item-details-card">
                         <!-- Image -->
@@ -570,6 +996,12 @@ if (itemDetailsContainer) {
                             <!-- Additional Info -->
                             ${additionalSection}
 
+                            <!-- Verified Recovery Receipt (if recovered) -->
+                            ${recoveryReceiptHtml}
+
+                            <!-- Claims & Recovery Workflow -->
+                            ${claimWorkflowHtml}
+
                             <!-- Back Navigation -->
                             <a href="${isLost ? 'lost.html' : 'found.html'}" class="view-item-button">
                                 Back to ${isLost ? 'Lost' : 'Found'} Items
@@ -577,6 +1009,229 @@ if (itemDetailsContainer) {
                         </div>
                     </div>
                 `;
+
+                // --- Attach Event Listeners ---
+
+                // 1. Claim Submission Form Listener
+                const claimSubmitForm = document.getElementById("claimSubmitForm");
+                if (claimSubmitForm) {
+                    const claimAlert = document.getElementById("claimFormAlert");
+                    const submitBtn = document.getElementById("submitClaimBtn");
+
+                    claimSubmitForm.addEventListener("submit", async function (e) {
+                        e.preventDefault();
+                        if (claimAlert) claimAlert.style.display = "none";
+
+                        const explanation = document.getElementById("claimExplanation").value.trim();
+                        const verificationDetails = document.getElementById("claimVerification").value.trim();
+
+                        if (!explanation || explanation.length < 10 || explanation.length > 2000) {
+                            if (claimAlert) {
+                                claimAlert.className = "auth-alert error";
+                                claimAlert.textContent = "Please provide an explanation of at least 10 characters.";
+                                claimAlert.style.display = "block";
+                            }
+                            return;
+                        }
+
+                        if (!verificationDetails || verificationDetails.length < 5 || verificationDetails.length > 2000) {
+                            if (claimAlert) {
+                                claimAlert.className = "auth-alert error";
+                                claimAlert.textContent = "Please provide confidential verification proof of at least 5 characters.";
+                                claimAlert.style.display = "block";
+                            }
+                            return;
+                        }
+
+                        submitBtn.disabled = true;
+                        const originalText = submitBtn.textContent;
+                        submitBtn.textContent = "Submitting Claim...";
+
+                        try {
+                            await window.CampusFindAPI.submitClaim(report.reportId, {
+                                explanation,
+                                verificationDetails
+                            });
+                            alert("Your ownership claim has been submitted successfully! The finder will review your verification details.");
+                            await loadAndRenderItemDetails();
+                        } catch (err) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = originalText;
+                            if (claimAlert) {
+                                claimAlert.className = "auth-alert error";
+                                claimAlert.textContent = err.message || "Failed to submit claim. Please try again.";
+                                claimAlert.style.display = "block";
+                            }
+                        }
+                    });
+                }
+
+                // 2. Claimant Withdraw Button Listener
+                const withdrawMyClaimBtn = document.getElementById("withdrawMyClaimBtn");
+                if (withdrawMyClaimBtn) {
+                    withdrawMyClaimBtn.addEventListener("click", function () {
+                        // Find current active claim ID
+                        window.CampusFindAPI.getMyClaims().then(myClaims => {
+                            const claim = myClaims.find(c => c.reportPublicId === report.reportId || c.reportId === report.id);
+                            if (!claim) return;
+
+                            showModal({
+                                title: "Withdraw Claim",
+                                bodyHtml: `<p>Are you sure you want to withdraw your claim on <strong>${escapeHTML(report.itemName)}</strong>? This action cannot be undone.</p>`,
+                                confirmText: "Yes, Withdraw Claim",
+                                confirmClass: "btn-reject",
+                                onConfirm: async function (backdrop, closeModal) {
+                                    try {
+                                        await window.CampusFindAPI.withdrawClaim(claim.id);
+                                        closeModal();
+                                        alert("Your claim has been withdrawn.");
+                                        await loadAndRenderItemDetails();
+                                    } catch (err) {
+                                        alert("Failed to withdraw claim: " + err.message);
+                                    }
+                                }
+                            });
+                        });
+                    });
+                }
+
+                // 3. Finder Review Buttons (Approve / Reject)
+                const approveBtns = itemDetailsContainer.querySelectorAll(".review-approve-btn");
+                approveBtns.forEach(btn => {
+                    btn.addEventListener("click", function () {
+                        const claimId = btn.getAttribute("data-claim-id");
+                        const claimant = btn.getAttribute("data-claimant");
+
+                        showModal({
+                            title: "Approve Ownership Claim",
+                            bodyHtml: `
+                                <p>Are you sure you want to <strong>approve</strong> the claim from <strong>${escapeHTML(claimant)}</strong>?</p>
+                                <div class="form-group" style="margin-top: 14px;">
+                                    <label for="reviewNotesModalInput">Review Notes (Optional):</label>
+                                    <textarea id="reviewNotesModalInput" rows="2" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;" placeholder="e.g. Verification details match the item."></textarea>
+                                </div>
+                            `,
+                            confirmText: "Confirm Approval",
+                            confirmClass: "btn-approve",
+                            onConfirm: async function (backdrop, closeModal) {
+                                const notesInput = document.getElementById("reviewNotesModalInput");
+                                const reviewNotes = notesInput ? notesInput.value.trim() : null;
+                                try {
+                                    await window.CampusFindAPI.reviewClaim(claimId, {
+                                        status: "APPROVED",
+                                        reviewNotes: reviewNotes || null
+                                    });
+                                    closeModal();
+                                    alert("Claim approved successfully!");
+                                    await loadAndRenderItemDetails();
+                                } catch (err) {
+                                    alert("Failed to approve claim: " + err.message);
+                                }
+                            }
+                        });
+                    });
+                });
+
+                const rejectBtns = itemDetailsContainer.querySelectorAll(".review-reject-btn");
+                rejectBtns.forEach(btn => {
+                    btn.addEventListener("click", function () {
+                        const claimId = btn.getAttribute("data-claim-id");
+                        const claimant = btn.getAttribute("data-claimant");
+
+                        showModal({
+                            title: "Reject Ownership Claim",
+                            bodyHtml: `
+                                <p>Are you sure you want to <strong>reject</strong> the claim from <strong>${escapeHTML(claimant)}</strong>?</p>
+                                <div class="form-group" style="margin-top: 14px;">
+                                    <label for="reviewNotesModalInput">Reason / Notes (Optional):</label>
+                                    <textarea id="reviewNotesModalInput" rows="2" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;" placeholder="e.g. Identifying marks did not match."></textarea>
+                                </div>
+                            `,
+                            confirmText: "Confirm Rejection",
+                            confirmClass: "btn-reject",
+                            onConfirm: async function (backdrop, closeModal) {
+                                const notesInput = document.getElementById("reviewNotesModalInput");
+                                const reviewNotes = notesInput ? notesInput.value.trim() : null;
+                                try {
+                                    await window.CampusFindAPI.reviewClaim(claimId, {
+                                        status: "REJECTED",
+                                        reviewNotes: reviewNotes || null
+                                    });
+                                    closeModal();
+                                    alert("Claim rejected.");
+                                    await loadAndRenderItemDetails();
+                                } catch (err) {
+                                    alert("Failed to reject claim: " + err.message);
+                                }
+                            }
+                        });
+                    });
+                });
+
+                // 4. Record Recovery Handover Modal Listener
+                const openRecoveryModalBtn = document.getElementById("openRecoveryModalBtn");
+                if (openRecoveryModalBtn) {
+                    openRecoveryModalBtn.addEventListener("click", async function () {
+                        try {
+                            const claims = await window.CampusFindAPI.getReportClaims(report.reportId);
+                            const approved = claims.find(c => c.status === "APPROVED");
+                            if (!approved) {
+                                alert("No approved claim found for this report.");
+                                return;
+                            }
+
+                            const todayStr = new Date().toISOString().split("T")[0];
+
+                            showModal({
+                                title: "Record Physical Handover",
+                                bodyHtml: `
+                                    <p>Confirming physical return of <strong>${escapeHTML(report.itemName)}</strong> to <strong>${escapeHTML(approved.claimantName || "Claimant")}</strong>.</p>
+                                    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 10px; font-size: 13px; color: #92400e; margin: 12px 0;">
+                                        ⚠️ <strong>Notice:</strong> This action will permanently mark the report as <strong>RECOVERED</strong> and automatically reject any other pending claims.
+                                    </div>
+                                    <div class="form-group" style="margin-top: 12px;">
+                                        <label for="recoveryDateInput">Handover Date *</label>
+                                        <input type="date" id="recoveryDateInput" value="${todayStr}" max="${todayStr}" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+                                    </div>
+                                    <div class="form-group" style="margin-top: 12px;">
+                                        <label for="recoveryNotesInput">Handover Notes (Optional):</label>
+                                        <textarea id="recoveryNotesInput" rows="2" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;" placeholder="e.g. Verified student ID and handed over laptop at library desk."></textarea>
+                                    </div>
+                                `,
+                                confirmText: "Confirm Handover & Resolve",
+                                confirmClass: "btn-recovery",
+                                onConfirm: async function (backdrop, closeModal) {
+                                    const dateInput = document.getElementById("recoveryDateInput");
+                                    const notesInput = document.getElementById("recoveryNotesInput");
+
+                                    const recoveryDate = dateInput ? dateInput.value : todayStr;
+                                    const notes = notesInput ? notesInput.value.trim() : null;
+
+                                    if (!recoveryDate) {
+                                        alert("Please select the handover date.");
+                                        return;
+                                    }
+
+                                    try {
+                                        await window.CampusFindAPI.recordRecovery(report.reportId, {
+                                            claimId: approved.id,
+                                            recoveryDate: recoveryDate,
+                                            notes: notes || null
+                                        });
+                                        closeModal();
+                                        alert("Item handover recorded successfully! The report is now marked as RECOVERED.");
+                                        await loadAndRenderItemDetails();
+                                    } catch (err) {
+                                        alert("Failed to record recovery handover: " + err.message);
+                                    }
+                                }
+                            });
+                        } catch (err) {
+                            alert("Failed to prepare recovery handover: " + err.message);
+                        }
+                    });
+                }
+
             } catch (error) {
                 itemDetailsContainer.innerHTML = `
                     <div class="no-results">
@@ -586,7 +1241,9 @@ if (itemDetailsContainer) {
                     </div>
                 `;
             }
-        })();
+        }
+
+        loadAndRenderItemDetails();
     }
 }
 
@@ -649,6 +1306,15 @@ if (homeRecentContainer) {
             // Remove guest login/register links
             const authLinks = navLinks.querySelectorAll(".auth-link");
             authLinks.forEach(link => link.remove());
+
+            // Add My Claims navigation link if not already present
+            if (!navLinks.querySelector('a[href*="my-claims.html"]')) {
+                const isPagesDir = window.location.pathname.includes("/pages/");
+                const myClaimsHref = isPagesDir ? "my-claims.html" : "pages/my-claims.html";
+                const claimsLi = document.createElement("li");
+                claimsLi.innerHTML = `<a href="${myClaimsHref}">My Claims</a>`;
+                navLinks.appendChild(claimsLi);
+            }
 
             // Create user greeting item
             const userLi = document.createElement("li");
@@ -885,4 +1551,155 @@ if (registerForm) {
             }
         }
     });
+}
+
+
+// =============================================================================
+// 9. MY CLAIMS PAGE CONTROLLER (pages/my-claims.html)
+// =============================================================================
+
+const myClaimsContainer = document.getElementById("myClaimsContainer");
+
+if (myClaimsContainer) {
+    const claimsLoading = document.getElementById("claimsLoading");
+    const emptyClaims = document.getElementById("emptyClaims");
+    const claimsAlert = document.getElementById("claimsAlert");
+
+    function showClaimsAlert(msg, type = "error") {
+        if (!claimsAlert) return;
+        claimsAlert.className = `auth-alert ${type}`;
+        claimsAlert.textContent = msg;
+        claimsAlert.style.display = "block";
+    }
+
+    async function loadMyClaims() {
+        if (claimsLoading) claimsLoading.style.display = "block";
+        if (emptyClaims) emptyClaims.style.display = "none";
+        myClaimsContainer.style.display = "none";
+        myClaimsContainer.innerHTML = "";
+
+        // 1. Authenticate user session
+        let currentUser = null;
+        try {
+            currentUser = await window.CampusFindAPI.getCurrentUser();
+        } catch (e) {
+            // Unauthenticated
+        }
+
+        if (!currentUser || !currentUser.email) {
+            if (claimsLoading) claimsLoading.style.display = "none";
+            // Redirect unauthenticated user to login with return redirect
+            window.location.href = "login.html?redirect=my-claims.html";
+            return;
+        }
+
+        // 2. Fetch user's claims from backend
+        try {
+            const claims = await window.CampusFindAPI.getMyClaims();
+            if (claimsLoading) claimsLoading.style.display = "none";
+
+            if (!Array.isArray(claims) || claims.length === 0) {
+                if (emptyClaims) emptyClaims.style.display = "block";
+                return;
+            }
+
+            myClaimsContainer.style.display = "grid";
+            myClaimsContainer.innerHTML = "";
+
+            claims.forEach(claim => {
+                const card = document.createElement("article");
+                card.className = "my-claim-card";
+
+                const isPending = claim.status === "PENDING";
+                const badgeHtml = formatClaimBadge(claim.status);
+                const submittedDate = claim.createdAt ? new Date(claim.createdAt).toLocaleDateString(undefined, {
+                    year: "numeric", month: "short", day: "numeric"
+                }) : "Unknown";
+
+                const targetReportId = claim.reportPublicId || claim.reportId;
+                const itemLink = targetReportId ? `item.html?id=${encodeURIComponent(targetReportId)}` : "found.html";
+
+                let withdrawBtnHtml = "";
+                if (isPending) {
+                    withdrawBtnHtml = `
+                        <button type="button" class="btn-withdraw withdraw-claim-btn" data-claim-id="${claim.id}" data-item-name="${escapeHTML(claim.reportItemName || "item")}">
+                            Withdraw Claim
+                        </button>
+                    `;
+                }
+
+                let reviewNotesHtml = "";
+                if (claim.reviewNotes) {
+                    reviewNotesHtml = `
+                        <div class="claim-notes" style="margin-top: 10px; padding: 10px 14px; background: #f8fafc; border-left: 3px solid #64748b; border-radius: 4px; font-size: 13.5px; color: #334155;">
+                            <strong>Reviewer Note:</strong> ${escapeHTML(claim.reviewNotes)}
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="card-top">
+                        <div>
+                            <h3>
+                                <a href="${itemLink}">${escapeHTML(claim.reportItemName || "Claimed Item")}</a>
+                            </h3>
+                            <div class="report-meta">
+                                Submitted on ${submittedDate}
+                                ${claim.reportCategory ? ` • Category: ${escapeHTML(capitalize(claim.reportCategory))}` : ""}
+                                ${claim.reportLocation ? ` • Location: ${escapeHTML(formatLocation(claim.reportLocation))}` : ""}
+                            </div>
+                        </div>
+                        <div>
+                            ${badgeHtml}
+                        </div>
+                    </div>
+
+                    <div class="claim-body">
+                        <p style="margin: 0 0 8px 0;"><strong>Why is this your item:</strong> ${escapeHTML(claim.explanation)}</p>
+                        ${claim.verificationDetails ? `<p style="margin: 0 0 8px 0; font-size: 13.5px; color: #475569;"><strong>🔒 Your Verification Proof:</strong> ${escapeHTML(claim.verificationDetails)}</p>` : ""}
+                        ${reviewNotesHtml}
+                    </div>
+
+                    <div class="card-actions">
+                        <a href="${itemLink}" class="view-item-button" style="padding: 8px 16px; font-size: 14px;">View Item Details</a>
+                        ${withdrawBtnHtml}
+                    </div>
+                `;
+
+                myClaimsContainer.appendChild(card);
+            });
+
+            // Attach withdraw button listeners
+            const withdrawBtns = myClaimsContainer.querySelectorAll(".withdraw-claim-btn");
+            withdrawBtns.forEach(btn => {
+                btn.addEventListener("click", function () {
+                    const claimId = btn.getAttribute("data-claim-id");
+                    const itemName = btn.getAttribute("data-item-name");
+
+                    showModal({
+                        title: "Withdraw Ownership Claim",
+                        bodyHtml: `<p>Are you sure you want to withdraw your claim on <strong>${escapeHTML(itemName)}</strong>? You will no longer be considered for ownership of this item.</p>`,
+                        confirmText: "Yes, Withdraw Claim",
+                        confirmClass: "btn-reject",
+                        onConfirm: async function (backdrop, closeModal) {
+                            try {
+                                await window.CampusFindAPI.withdrawClaim(claimId);
+                                closeModal();
+                                alert("Your claim has been withdrawn.");
+                                await loadMyClaims();
+                            } catch (err) {
+                                alert("Failed to withdraw claim: " + err.message);
+                            }
+                        }
+                    });
+                });
+            });
+
+        } catch (err) {
+            if (claimsLoading) claimsLoading.style.display = "none";
+            showClaimsAlert(err.message || "Failed to load your claims. Please try again later.", "error");
+        }
+    }
+
+    loadMyClaims();
 }

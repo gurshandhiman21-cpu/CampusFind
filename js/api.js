@@ -143,7 +143,7 @@ const CampusFindAPI = (function () {
         } catch (error) {
             // Distinguish network connection failures (backend offline / server down)
             if (!error.status) {
-                error.message = "Unable to connect to the CampusFind backend at " + API_BASE_URL + 
+                error.message = "Unable to connect to the CampusFind backend at " + API_BASE_URL +
                                 ". Please verify that the Spring Boot server is running on port 8080.";
             }
             throw error;
@@ -326,6 +326,149 @@ const CampusFindAPI = (function () {
          */
         getCurrentUser: function () {
             return request("/auth/me");
+        },
+
+        // =========================================================================
+        // Claims & Recovery Endpoints (Phase 8B)
+        // =========================================================================
+
+        /**
+         * Submits an ownership claim against a found report.
+         * POST /api/reports/{reportId}/claims
+         * @param {string} reportId - Public report ID (e.g. FND-20261026-TEST)
+         * @param {{ explanation: string, verificationDetails: string }} data
+         * @returns {Promise<ClaimResponse>}
+         */
+        submitClaim: function (reportId, data) {
+            if (!reportId || String(reportId).trim() === "") {
+                return Promise.reject(new Error("A report identifier is required."));
+            }
+            if (!data || !data.explanation || typeof data.explanation !== "string" || data.explanation.trim().length < 10 || data.explanation.trim().length > 2000) {
+                return Promise.reject(new Error("Explanation must be between 10 and 2000 characters."));
+            }
+            if (!data.verificationDetails || typeof data.verificationDetails !== "string" || data.verificationDetails.trim().length < 5 || data.verificationDetails.trim().length > 2000) {
+                return Promise.reject(new Error("Verification proof must be between 5 and 2000 characters."));
+            }
+            return request(`/reports/${encodeURIComponent(String(reportId).trim())}/claims`, {
+                method: "POST",
+                body: {
+                    explanation: data.explanation.trim(),
+                    verificationDetails: data.verificationDetails.trim()
+                }
+            });
+        },
+
+        /**
+         * Retrieves claims submitted by the currently authenticated user.
+         * GET /api/claims/my
+         * @returns {Promise<Array<ClaimResponse>>}
+         */
+        getMyClaims: function () {
+            return request("/claims/my");
+        },
+
+        /**
+         * Retrieves a single claim by its internal ID.
+         * GET /api/claims/{claimId}
+         * @param {number|string} claimId
+         * @returns {Promise<ClaimResponse>}
+         */
+        getClaimById: function (claimId) {
+            if (!claimId) {
+                return Promise.reject(new Error("A claim ID is required."));
+            }
+            return request(`/claims/${encodeURIComponent(String(claimId).trim())}`);
+        },
+
+        /**
+         * Retrieves all claims filed against a specific report (finder / staff only).
+         * GET /api/reports/{reportId}/claims
+         * @param {string} reportId
+         * @returns {Promise<Array<ClaimResponse>>}
+         */
+        getReportClaims: function (reportId) {
+            if (!reportId || String(reportId).trim() === "") {
+                return Promise.reject(new Error("A report identifier is required."));
+            }
+            return request(`/reports/${encodeURIComponent(String(reportId).trim())}/claims`);
+        },
+
+        /**
+         * Reviews (approves or rejects) a pending claim.
+         * PATCH /api/claims/{claimId}/review
+         * @param {number|string} claimId
+         * @param {{ status: "APPROVED"|"REJECTED", reviewNotes?: string }} data
+         * @returns {Promise<ClaimResponse>}
+         */
+        reviewClaim: function (claimId, data) {
+            if (!claimId) {
+                return Promise.reject(new Error("A claim ID is required."));
+            }
+            if (!data || !data.status || !["APPROVED", "REJECTED"].includes(String(data.status).toUpperCase())) {
+                return Promise.reject(new Error("Status must be either APPROVED or REJECTED."));
+            }
+            return request(`/claims/${encodeURIComponent(String(claimId).trim())}/review`, {
+                method: "PATCH",
+                body: {
+                    status: String(data.status).toUpperCase(),
+                    reviewNotes: data.reviewNotes ? String(data.reviewNotes).trim() : null
+                }
+            });
+        },
+
+        /**
+         * Withdraws a pending claim previously filed by the current user.
+         * PATCH /api/claims/{claimId}/withdraw
+         * @param {number|string} claimId
+         * @returns {Promise<ClaimResponse>}
+         */
+        withdrawClaim: function (claimId) {
+            if (!claimId) {
+                return Promise.reject(new Error("A claim ID is required."));
+            }
+            return request(`/claims/${encodeURIComponent(String(claimId).trim())}/withdraw`, {
+                method: "PATCH"
+            });
+        },
+
+        /**
+         * Records a verified physical handover for an approved claim.
+         * POST /api/reports/{reportId}/recovery
+         * @param {string} reportId
+         * @param {{ claimId: number, recoveryDate: string, notes?: string }} data
+         * @returns {Promise<RecoveryResponse>}
+         */
+        recordRecovery: function (reportId, data) {
+            if (!reportId || String(reportId).trim() === "") {
+                return Promise.reject(new Error("A report identifier is required."));
+            }
+            if (!data || !data.claimId) {
+                return Promise.reject(new Error("claimId is required to record recovery."));
+            }
+            if (!data.recoveryDate) {
+                return Promise.reject(new Error("recoveryDate is required to record recovery."));
+            }
+            return request(`/reports/${encodeURIComponent(String(reportId).trim())}/recovery`, {
+                method: "POST",
+                body: {
+                    claimId: data.claimId,
+                    recoveryDate: data.recoveryDate,
+                    notes: data.notes ? String(data.notes).trim() : null
+                }
+            });
+        },
+
+        /**
+         * Retrieves the recovery audit record for a resolved report.
+         * GET /api/reports/{reportId}/recovery
+         * @param {string} reportId
+         * @returns {Promise<RecoveryResponse>}
+         */
+        getRecovery: function (reportId) {
+            if (!reportId || String(reportId).trim() === "") {
+                return Promise.reject(new Error("A report identifier is required."));
+            }
+            return request(`/reports/${encodeURIComponent(String(reportId).trim())}/recovery`);
         }
     };
 })();
