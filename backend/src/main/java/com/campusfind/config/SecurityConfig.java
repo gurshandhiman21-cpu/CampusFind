@@ -69,6 +69,11 @@ public class SecurityConfig {
                 // Public Health Check
                 .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
 
+                // Protected Claim and Recovery Endpoints (explicitly authenticated; placed before generic report matchers)
+                .requestMatchers("/api/claims", "/api/claims/**").authenticated()
+                .requestMatchers("/api/reports/*/claims", "/api/reports/*/claims/**").authenticated()
+                .requestMatchers("/api/reports/*/recovery", "/api/reports/*/recovery/**").authenticated()
+
                 // Public Report Endpoints
                 .requestMatchers(HttpMethod.GET, "/api/reports", "/api/reports/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/reports").permitAll()
