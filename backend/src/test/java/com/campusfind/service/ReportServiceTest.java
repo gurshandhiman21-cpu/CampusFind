@@ -8,6 +8,9 @@ import com.campusfind.entity.enums.ReportType;
 import com.campusfind.exception.ResourceNotFoundException;
 import com.campusfind.repository.ReportRepository;
 import com.campusfind.service.impl.ReportServiceImpl;
+import com.campusfind.entity.User;
+import com.campusfind.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +18,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -38,11 +44,20 @@ class ReportServiceTest {
     @Mock
     private ReportRepository reportRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     private ReportService reportService;
 
     @BeforeEach
     void setUp() {
-        reportService = new ReportServiceImpl(reportRepository);
+        SecurityContextHolder.clearContext();
+        reportService = new ReportServiceImpl(reportRepository, userRepository);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -300,5 +315,84 @@ class ReportServiceTest {
         assertThatThrownBy(() -> reportService.createReport(traversalReq))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid image URL");
+    }
+
+    @Test
+    @DisplayName("createReport associates authenticated User entity when SecurityContext is populated")
+    void testCreateReportAuthenticatedUserAssociated() {
+        ReportCreateRequest request = new ReportCreateRequest(
+                ReportType.LOST,
+                "Scientific Calculator",
+                "electronics",
+                "Casio fx-991EX left in math lab",
+                "science block",
+                LocalDate.of(2026, 10, 20)
+        );
+
+        User authenticatedUser = new User();
+        authenticatedUser.setId(5L);
+        authenticatedUser.setEmail("student@campus.edu");
+        authenticatedUser.setFullName("Campus Student");
+
+        when(userRepository.findByEmail("student@campus.edu")).thenReturn(Optional.of(authenticatedUser));
+        when(reportRepository.existsByReportId(anyString())).thenReturn(false);
+        when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        "student@campus.edu",
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_STUDENT"))
+                )
+        );
+
+        ReportResponse response = reportService.createReport(request);
+
+        assertThat(response).isNotNull();
+        ArgumentCaptor<Report> captor = ArgumentCaptor.forClass(Report.class);
+        verify(reportRepository).save(captor.capture());
+        Report captured = captor.getValue();
+
+        assertThat(captured.getUser()).isNotNull();
+        assertThat(captured.getUser().getId()).isEqualTo(5L);
+        assertThat(captured.getUser().getEmail()).isEqualTo("student@campus.edu");
+    }
+
+    @Test
+    @DisplayName("createReport leaves user null when user is anonymous")
+    void testCreateReportAnonymousLeavesUserNull() {
+        ReportCreateRequest request = new ReportCreateRequest(
+                ReportType.FOUND,
+                "Water Bottle",
+                "personal_items",
+                "Blue bottle found on bench",
+                "cafeteria",
+                LocalDate.of(2026, 10, 21)
+        );
+
+        when(reportRepository.existsByReportId(anyString())).thenReturn(false);
+        when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ReportResponse response = reportService.createReport(request);
+
+        assertThat(response).isNotNull();
+        ArgumentCaptor<Report> captor = ArgumentCaptor.forClass(Report.class);
+        verify(reportRepository).save(captor.capture());
+        Report captured = captor.getValue();
+
+        assertThat(captured.getUser()).isNull();
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    @DisplayName("ReportServiceImpl has exactly one explicit constructor to satisfy Spring dependency injection")
+    void testReportServiceImplHasSingleExplicitConstructor() {
+        java.lang.reflect.Constructor<?>[] constructors = ReportServiceImpl.class.getDeclaredConstructors();
+        assertThat(constructors)
+                .as("ReportServiceImpl must have a single constructor for unambiguous Spring autowiring")
+                .hasSize(1);
+        assertThat(constructors[0].getParameterTypes())
+                .as("Constructor must accept both ReportRepository and UserRepository")
+                .containsExactly(ReportRepository.class, UserRepository.class);
     }
 }

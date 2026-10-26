@@ -633,3 +633,256 @@ if (homeRecentContainer) {
         }
     })();
 }
+
+
+// =============================================================================
+// 6. GLOBAL AUTHENTICATION & NAVIGATION STATE
+// =============================================================================
+
+(async function initNavbarAuth() {
+    const navLinks = document.getElementById("navLinks");
+    if (!navLinks) return;
+
+    try {
+        const user = await window.CampusFindAPI.getCurrentUser();
+        if (user && user.email) {
+            // Remove guest login/register links
+            const authLinks = navLinks.querySelectorAll(".auth-link");
+            authLinks.forEach(link => link.remove());
+
+            // Create user greeting item
+            const userLi = document.createElement("li");
+            userLi.className = "nav-user";
+
+            const greetingSpan = document.createElement("span");
+            greetingSpan.className = "user-greeting";
+            const displayName = escapeHTML(user.fullName || user.email.split("@")[0]);
+            const roleBadge = user.role ? `<span class="user-role-badge">${escapeHTML(user.role)}</span>` : "";
+            greetingSpan.innerHTML = `Hi, ${displayName}${roleBadge}`;
+            userLi.appendChild(greetingSpan);
+
+            // Create logout button item
+            const logoutLi = document.createElement("li");
+            const logoutBtn = document.createElement("button");
+            logoutBtn.id = "navLogoutBtn";
+            logoutBtn.className = "nav-logout-btn";
+            logoutBtn.textContent = "Logout";
+            logoutBtn.type = "button";
+
+            logoutBtn.addEventListener("click", async function () {
+                logoutBtn.disabled = true;
+                logoutBtn.textContent = "Logging out...";
+                try {
+                    await window.CampusFindAPI.logout();
+                } catch (e) {
+                    console.warn("Logout error:", e);
+                } finally {
+                    // Refresh current view to update navigation and protected states
+                    window.location.reload();
+                }
+            });
+
+            logoutLi.appendChild(logoutBtn);
+            navLinks.appendChild(userLi);
+            navLinks.appendChild(logoutLi);
+        }
+    } catch (err) {
+        // 401 Unauthorized or backend offline: user is guest, leave Login & Register links visible
+        if (err.status !== 401) {
+            console.debug("Current session check:", err.message);
+        }
+    }
+})();
+
+
+// =============================================================================
+// 7. LOGIN PAGE CONTROLLER (pages/login.html)
+// =============================================================================
+
+const loginForm = document.getElementById("loginForm");
+
+if (loginForm) {
+    const emailInput = document.getElementById("loginEmail");
+    const passwordInput = document.getElementById("loginPassword");
+    const authAlert = document.getElementById("authAlert");
+    const emailError = document.getElementById("emailError");
+    const passwordError = document.getElementById("passwordError");
+    const submitBtn = document.getElementById("loginSubmitBtn");
+
+    function showAlert(message, type = "error") {
+        if (!authAlert) return;
+        authAlert.className = `auth-alert ${type}`;
+        authAlert.textContent = message;
+        authAlert.style.display = "block";
+    }
+
+    function clearAlert() {
+        if (!authAlert) return;
+        authAlert.className = "auth-alert";
+        authAlert.textContent = "";
+        authAlert.style.display = "none";
+    }
+
+    loginForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        clearAlert();
+        if (emailError) emailError.classList.remove("active");
+        if (passwordError) passwordError.classList.remove("active");
+
+        const email = emailInput.value.trim().toLowerCase();
+        const password = passwordInput.value;
+
+        let hasError = false;
+
+        // Basic client-side email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            if (emailError) emailError.classList.add("active");
+            hasError = true;
+        }
+
+        if (!password) {
+            if (passwordError) passwordError.classList.add("active");
+            hasError = true;
+        }
+
+        if (hasError) return;
+
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = "Logging in...";
+
+        try {
+            const user = await window.CampusFindAPI.login({ email, password });
+            showAlert(`Welcome back, ${user.fullName || user.email}! Redirecting...`, "success");
+
+            // Handle safe redirect query parameter
+            const params = new URLSearchParams(window.location.search);
+            const redirectTarget = params.get("redirect");
+            let destination = "lost.html";
+
+            if (redirectTarget && !redirectTarget.startsWith("http://") && !redirectTarget.startsWith("https://") && !redirectTarget.startsWith("//")) {
+                destination = redirectTarget;
+            }
+
+            setTimeout(() => {
+                window.location.href = destination;
+            }, 600);
+        } catch (err) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+
+            if (err.status === 401) {
+                showAlert("Invalid email or password. Please check your credentials and try again.", "error");
+            } else if (err.status === 429) {
+                showAlert("Too many failed login attempts. Please wait 5 minutes before trying again.", "error");
+            } else {
+                showAlert(err.message || "An unexpected error occurred during login. Please try again.", "error");
+            }
+        }
+    });
+}
+
+
+// =============================================================================
+// 8. REGISTRATION PAGE CONTROLLER (pages/register.html)
+// =============================================================================
+
+const registerForm = document.getElementById("registerForm");
+
+if (registerForm) {
+    const fullNameInput = document.getElementById("registerFullName");
+    const emailInput = document.getElementById("registerEmail");
+    const passwordInput = document.getElementById("registerPassword");
+    const confirmPasswordInput = document.getElementById("registerConfirmPassword");
+    const authAlert = document.getElementById("authAlert");
+    const nameError = document.getElementById("nameError");
+    const emailError = document.getElementById("emailError");
+    const passwordError = document.getElementById("passwordError");
+    const confirmPasswordError = document.getElementById("confirmPasswordError");
+    const submitBtn = document.getElementById("registerSubmitBtn");
+
+    function showAlert(message, type = "error") {
+        if (!authAlert) return;
+        authAlert.className = `auth-alert ${type}`;
+        authAlert.textContent = message;
+        authAlert.style.display = "block";
+    }
+
+    function clearAlert() {
+        if (!authAlert) return;
+        authAlert.className = "auth-alert";
+        authAlert.textContent = "";
+        authAlert.style.display = "none";
+    }
+
+    registerForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        clearAlert();
+        if (nameError) nameError.classList.remove("active");
+        if (emailError) emailError.classList.remove("active");
+        if (passwordError) passwordError.classList.remove("active");
+        if (confirmPasswordError) confirmPasswordError.classList.remove("active");
+
+        const fullName = fullNameInput.value.trim();
+        const email = emailInput.value.trim().toLowerCase();
+        const password = passwordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
+
+        let hasError = false;
+
+        if (!fullName || fullName.length < 2 || fullName.length > 100) {
+            if (nameError) nameError.classList.add("active");
+            hasError = true;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email) || email.length > 150) {
+            if (emailError) emailError.classList.add("active");
+            hasError = true;
+        }
+
+        if (!password || password.length < 8 || password.length > 128) {
+            if (passwordError) passwordError.classList.add("active");
+            hasError = true;
+        }
+
+        if (password !== confirmPassword) {
+            if (confirmPasswordError) confirmPasswordError.classList.add("active");
+            hasError = true;
+        }
+
+        if (hasError) return;
+
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = "Creating Account...";
+
+        try {
+            const user = await window.CampusFindAPI.register({ fullName, email, password });
+            registerForm.reset();
+
+            // Provide direct login link inside alert
+            if (authAlert) {
+                authAlert.className = "auth-alert success";
+                authAlert.style.display = "block";
+                authAlert.innerHTML = `Account created successfully for <strong>${escapeHTML(user.fullName)}</strong>! <a href="login.html" style="color: inherit; font-weight: bold; text-decoration: underline; margin-left: 8px;">Click here to log in &rarr;</a>`;
+            }
+
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Account Created";
+        } catch (err) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+
+            if (err.status === 409) {
+                showAlert("An account with this email address already exists. Please log in or use a different email.", "error");
+            } else if (err.status === 400 && err.fieldErrors) {
+                const firstErr = Object.values(err.fieldErrors)[0];
+                showAlert(firstErr || "Please verify all required fields.", "error");
+            } else {
+                showAlert(err.message || "An unexpected error occurred during registration.", "error");
+            }
+        }
+    });
+}

@@ -11,7 +11,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.campusfind.config.SecurityConfig;
+import com.campusfind.config.WebCorsConfig;
+import org.springframework.context.annotation.Import;
+
 @WebMvcTest(HealthController.class)
+@Import({SecurityConfig.class, WebCorsConfig.class})
 class HealthControllerTest {
 
     @Autowired

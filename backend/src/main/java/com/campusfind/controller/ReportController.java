@@ -22,7 +22,6 @@ import java.util.List;
 /**
  * REST controller exposing lost and found report endpoints under /api/reports.
  */
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/reports")
 public class ReportController {

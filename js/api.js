@@ -1,34 +1,112 @@
 /**
  * CampusFind API Client
  * Central communication layer between the frontend UI and Spring Boot REST backend.
+ * Configured with credentialed session authentication and CSRF token management.
  */
 const CampusFindAPI = (function () {
     // Local development endpoint for Spring Boot backend
     const API_BASE_URL = "http://localhost:8080/api";
 
+    // In-memory CSRF state (never stored in localStorage or sessionStorage)
+    let csrfTokenCache = null;
+    let csrfHeaderName = "X-CSRF-TOKEN";
+    let csrfFetchPromise = null;
+
     /**
-     * Unified fetch wrapper with error handling, timeout, and JSON decoding.
+     * Fetches or returns cached CSRF token.
+     * Deduplicates concurrent fetch requests.
+     * @param {boolean} forceRefresh - If true, ignores cache and requests a new token.
+     * @returns {Promise<{ token: string, headerName: string, parameterName: string }>}
+     */
+    async function fetchCsrfToken(forceRefresh = false) {
+        if (!forceRefresh && csrfTokenCache) {
+            return { token: csrfTokenCache, headerName: csrfHeaderName };
+        }
+        if (csrfFetchPromise) {
+            return csrfFetchPromise;
+        }
+
+        csrfFetchPromise = (async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/csrf`, {
+                    method: "GET",
+                    credentials: "include",
+                    headers: { "Accept": "application/json" }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to acquire CSRF token (${response.status})`);
+                }
+
+                const data = await response.json();
+                csrfTokenCache = data.token || "";
+                csrfHeaderName = data.headerName || "X-CSRF-TOKEN";
+                return {
+                    token: csrfTokenCache,
+                    headerName: csrfHeaderName,
+                    parameterName: data.parameterName || "_csrf"
+                };
+            } finally {
+                csrfFetchPromise = null;
+            }
+        })();
+
+        return csrfFetchPromise;
+    }
+
+    /**
+     * Unified fetch wrapper with error handling, timeout, credentials, and JSON decoding.
+     * Automatically handles CSRF token injection and transparent single-retry on 403 token expiration.
      * @param {string} endpoint - Relative path (e.g., "/reports")
      * @param {object} options - Fetch options (method, headers, body)
+     * @param {boolean} isRetry - Internal flag to prevent infinite retry loops
      * @returns {Promise<any>}
      */
-    async function request(endpoint, options = {}) {
+    async function request(endpoint, options = {}, isRetry = false) {
         const url = `${API_BASE_URL}${endpoint}`;
+        const method = (options.method || "GET").toUpperCase();
+        const isUnsafeMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+
         const headers = {
             "Accept": "application/json",
             ...(options.headers || {})
         };
 
-        if (options.body && typeof options.body === "object" && !(options.body instanceof FormData)) {
+        // Attach CSRF token on mutation methods
+        if (isUnsafeMethod) {
+            try {
+                const csrf = await fetchCsrfToken(isRetry);
+                if (csrf && csrf.token) {
+                    headers[csrf.headerName] = csrf.token;
+                    // Also attach both standard header names for maximal compatibility
+                    headers["X-CSRF-TOKEN"] = csrf.token;
+                    headers["X-XSRF-TOKEN"] = csrf.token;
+                }
+            } catch (csrfErr) {
+                console.warn("Could not acquire CSRF token before request:", csrfErr);
+            }
+        }
+
+        let body = options.body;
+        if (body && typeof body === "object" && !(body instanceof FormData)) {
             headers["Content-Type"] = "application/json";
-            options.body = JSON.stringify(options.body);
+            body = JSON.stringify(body);
         }
 
         try {
             const response = await fetch(url, {
                 ...options,
-                headers
+                method,
+                credentials: "include", // Essential for session cookies (JSESSIONID)
+                headers,
+                body
             });
+
+            // On 403 for unsafe method, attempt a single refresh and retry
+            if (response.status === 403 && isUnsafeMethod && !isRetry) {
+                csrfTokenCache = null; // Invalidate stale cached token
+                return await request(endpoint, options, true);
+            }
 
             // Handle HTTP errors
             if (!response.ok) {
@@ -78,6 +156,14 @@ const CampusFindAPI = (function () {
          */
         getBaseUrl: function () {
             return API_BASE_URL;
+        },
+
+        /**
+         * Obtains the CSRF token metadata from the backend.
+         * @param {boolean} forceRefresh
+         */
+        getCsrfToken: function (forceRefresh = false) {
+            return fetchCsrfToken(forceRefresh);
         },
 
         /**
@@ -190,6 +276,56 @@ const CampusFindAPI = (function () {
             const cleanPath = trimmed.startsWith("/") ? trimmed : "/" + trimmed;
             const rootUrl = API_BASE_URL.replace(/\/api$/, "");
             return `${rootUrl}${cleanPath}`;
+        },
+
+        /**
+         * Registers a new student account.
+         * POST /api/auth/register
+         * @param {{ fullName: string, email: string, password: string }} data
+         * @returns {Promise<UserResponse>}
+         */
+        register: function (data) {
+            return request("/auth/register", {
+                method: "POST",
+                body: data
+            });
+        },
+
+        /**
+         * Authenticates user credentials and establishes a cookie session.
+         * POST /api/auth/login
+         * @param {{ email: string, password: string }} credentials
+         * @returns {Promise<UserResponse>}
+         */
+        login: function (credentials) {
+            return request("/auth/login", {
+                method: "POST",
+                body: credentials
+            });
+        },
+
+        /**
+         * Terminates the current authenticated session.
+         * POST /api/auth/logout
+         * @returns {Promise<void>}
+         */
+        logout: async function () {
+            try {
+                await request("/auth/logout", {
+                    method: "POST"
+                });
+            } finally {
+                csrfTokenCache = null; // Reset cached token after session teardown
+            }
+        },
+
+        /**
+         * Retrieves the profile of the currently authenticated user.
+         * GET /api/auth/me
+         * @returns {Promise<UserResponse>}
+         */
+        getCurrentUser: function () {
+            return request("/auth/me");
         }
     };
 })();

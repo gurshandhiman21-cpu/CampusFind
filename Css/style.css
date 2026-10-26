@@ -672,3 +672,157 @@ legend {
     }
 
 }
+
+
+/* =========================
+   AUTH PAGES & NAVBAR STATE
+========================= */
+
+.auth-container {
+    max-width: 480px;
+    margin: 50px auto 80px;
+    padding: 0 20px;
+}
+
+.auth-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 35px 30px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.auth-card h2 {
+    font-size: 28px;
+    margin-bottom: 8px;
+    color: #111;
+}
+
+.auth-card > p {
+    color: #666;
+    margin-bottom: 25px;
+    font-size: 15px;
+}
+
+.auth-alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: none;
+    line-height: 1.5;
+}
+
+.auth-alert.error {
+    display: block;
+    background: #fdf2f2;
+    border: 1px solid #f8b4b4;
+    color: #9b1c1c;
+}
+
+.auth-alert.success {
+    display: block;
+    background: #def7ec;
+    border: 1px solid #84e1bc;
+    color: #03543f;
+}
+
+.auth-alert.info {
+    display: block;
+    background: #e1effe;
+    border: 1px solid #a4cafe;
+    color: #1e429f;
+}
+
+.auth-card button[type="submit"] {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    background: #222;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 25px;
+    transition: background 0.2s ease;
+}
+
+.auth-card button[type="submit"]:hover {
+    background: #444;
+}
+
+.auth-card button[type="submit"]:disabled {
+    background: #888;
+    cursor: not-allowed;
+}
+
+.auth-footer {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+}
+
+.auth-footer a {
+    color: #111;
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+.field-error {
+    color: #c0392b;
+    font-size: 13px;
+    margin-top: 4px;
+    display: none;
+}
+
+.field-error.active {
+    display: block;
+}
+
+/* Nav user controls */
+.nav-user {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-greeting {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    background: #eef2f7;
+    padding: 5px 12px;
+    border-radius: 20px;
+}
+
+.user-role-badge {
+    font-size: 11px;
+    text-transform: uppercase;
+    background: #222;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+.nav-logout-btn {
+    background: transparent;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    color: #555;
+    transition: all 0.2s ease;
+}
+
+.nav-logout-btn:hover {
+    background: #fdf2f2;
+    border-color: #f8b4b4;
+    color: #c0392b;
+}

@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
  * Controller providing a lightweight health verification endpoint.
  * Accessible at GET /api/health.
  */
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api")
 public class HealthController {

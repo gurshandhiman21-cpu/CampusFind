@@ -22,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
  * - POST /api/images/upload (or POST /api/images): Uploads an image safely.
  * - GET /api/images/{filename}: Serves stored image resources safely with cache headers.
  */
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/images")
 public class ImageUploadController {

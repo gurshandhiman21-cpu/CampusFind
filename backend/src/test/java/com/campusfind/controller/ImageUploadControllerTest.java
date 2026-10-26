@@ -22,9 +22,13 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import com.campusfind.config.SecurityConfig;
+import com.campusfind.config.WebCorsConfig;
 
 /**
  * Controller tests for ImageUploadController endpoints:
@@ -33,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - GET /api/images/{filename}
  */
 @WebMvcTest(ImageUploadController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, WebCorsConfig.class})
 class ImageUploadControllerTest {
 
     @Autowired
@@ -57,7 +61,9 @@ class ImageUploadControllerTest {
         UploadResponse response = new UploadResponse("img_12345.jpg", "/api/images/img_12345.jpg", "image/jpeg", 4L);
         when(imageStorageService.storeImage(any())).thenReturn(response);
 
-        mockMvc.perform(multipart("/api/images/upload").file(file))
+        mockMvc.perform(multipart("/api/images/upload")
+                        .file(file)
+                        .with(csrf()))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.fileName").value("img_12345.jpg"))
@@ -79,7 +85,9 @@ class ImageUploadControllerTest {
         UploadResponse response = new UploadResponse("img_99999.png", "/api/images/img_99999.png", "image/png", 4L);
         when(imageStorageService.storeImage(any())).thenReturn(response);
 
-        mockMvc.perform(multipart("/api/images").file(file))
+        mockMvc.perform(multipart("/api/images")
+                        .file(file)
+                        .with(csrf()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.fileName").value("img_99999.png"))
                 .andExpect(jsonPath("$.imageUrl").value("/api/images/img_99999.png"));
@@ -98,7 +106,9 @@ class ImageUploadControllerTest {
         when(imageStorageService.storeImage(any()))
                 .thenThrow(new InvalidFileException("Invalid file type. Only JPEG, PNG, WEBP, and GIF images are allowed."));
 
-        mockMvc.perform(multipart("/api/images/upload").file(scriptFile))
+        mockMvc.perform(multipart("/api/images/upload")
+                        .file(scriptFile)
+                        .with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Invalid file type. Only JPEG, PNG, WEBP, and GIF images are allowed."));
@@ -117,7 +127,9 @@ class ImageUploadControllerTest {
         when(imageStorageService.storeImage(any()))
                 .thenThrow(new InvalidFileException("Please select an image file to upload."));
 
-        mockMvc.perform(multipart("/api/images/upload").file(emptyFile))
+        mockMvc.perform(multipart("/api/images/upload")
+                        .file(emptyFile)
+                        .with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Please select an image file to upload."));
@@ -136,7 +148,9 @@ class ImageUploadControllerTest {
         when(imageStorageService.storeImage(any()))
                 .thenThrow(new InvalidFileException("File size exceeds the maximum allowed limit of 5MB."));
 
-        mockMvc.perform(multipart("/api/images/upload").file(largeFile))
+        mockMvc.perform(multipart("/api/images/upload")
+                        .file(largeFile)
+                        .with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("File size exceeds the maximum allowed limit of 5MB."));
@@ -155,7 +169,9 @@ class ImageUploadControllerTest {
         when(imageStorageService.storeImage(any()))
                 .thenThrow(new FileStorageException("Failed to save image file to disk."));
 
-        mockMvc.perform(multipart("/api/images/upload").file(file))
+        mockMvc.perform(multipart("/api/images/upload")
+                        .file(file)
+                        .with(csrf()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.status").value(500))
                 .andExpect(jsonPath("$.message").value("Failed to save image file to disk."));
@@ -185,5 +201,19 @@ class ImageUploadControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("Image not found: img_notfound.jpg"));
+    }
+
+    @Test
+    @DisplayName("POST /api/images/upload without CSRF token returns 403 Forbidden")
+    void testUploadImageWithoutCsrfForbidden() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "calculator.jpg",
+                "image/jpeg",
+                VALID_JPEG_BYTES
+        );
+
+        mockMvc.perform(multipart("/api/images/upload").file(file))
+                .andExpect(status().isForbidden());
     }
 }

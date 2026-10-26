@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - CampusFind</title>
+    <link rel="stylesheet" href="../Css/style.css">
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <header>
+        <nav>
+            <h1>
+                <a href="../index.html">CampusFind</a>
+            </h1>
+            <ul id="navLinks">
+                <li><a href="../index.html">Home</a></li>
+                <li><a href="lost.html">Lost Items</a></li>
+                <li><a href="found.html">Found Items</a></li>
+                <li><a href="report.html">Report Item</a></li>
+                <li class="auth-link"><a href="login.html" class="active">Login</a></li>
+                <li class="auth-link"><a href="register.html">Register</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="auth-container">
+        <div class="auth-card">
+            <h2>Welcome Back</h2>
+            <p>Log in with your email and password to access your account.</p>
+
+            <div id="authAlert" class="auth-alert" role="alert" aria-live="polite"></div>
+
+            <form id="loginForm" novalidate>
+                <div class="form-group">
+                    <label for="loginEmail">Email Address</label>
+                    <input type="email" id="loginEmail" name="email" required autocomplete="email" placeholder="student@example.com">
+                    <span id="emailError" class="field-error">Please enter a valid email address.</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" name="password" required autocomplete="current-password" placeholder="Enter your password">
+                    <span id="passwordError" class="field-error">Please enter your password.</span>
+                </div>
+
+                <button type="submit" id="loginSubmitBtn">Log In</button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Don't have an account? <a href="register.html">Register here</a></p>
+                <p style="margin-top: 10px;"><a href="../index.html">&larr; Return to Home</a></p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2026 CampusFind. All rights reserved.</p>
+    </footer>
+
+    <script src="../js/api.js"></script>
+    <script src="../js/script.js"></script>
+
+</body>
+
+</html>

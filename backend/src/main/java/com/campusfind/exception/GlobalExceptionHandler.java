@@ -148,6 +148,99 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(EmailAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleEmailAlreadyExists(EmailAlreadyExistsException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(LoginRateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimitExceeded(LoginRateLimitExceededException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(error);
+    }
+
+    @ExceptionHandler({
+            org.springframework.security.authentication.BadCredentialsException.class,
+            org.springframework.security.core.userdetails.UsernameNotFoundException.class,
+            org.springframework.security.authentication.DisabledException.class,
+            org.springframework.security.authentication.LockedException.class,
+            org.springframework.security.authentication.InsufficientAuthenticationException.class,
+            org.springframework.security.core.AuthenticationException.class
+    })
+    public ResponseEntity<ErrorResponse> handleAuthenticationException(Exception ex, HttpServletRequest request) {
+        String message;
+        if (ex instanceof org.springframework.security.authentication.InsufficientAuthenticationException) {
+            message = "Authentication is required to access this resource.";
+        } else if (ex instanceof org.springframework.security.authentication.DisabledException || ex instanceof org.springframework.security.authentication.LockedException) {
+            message = ex.getMessage();
+        } else {
+            message = "Invalid email or password.";
+        }
+
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.UNAUTHORIZED.value(),
+                HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+                message,
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                "Access is denied or CSRF token is invalid.",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(DuplicateClaimException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateClaim(DuplicateClaimException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(InvalidClaimStateException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidClaimState(InvalidClaimStateException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(UnauthorizedAccessException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorizedAccess(UnauthorizedAccessException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex, HttpServletRequest request) {
         ErrorResponse error = new ErrorResponse(

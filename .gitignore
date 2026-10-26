@@ -1,6 +1,8 @@
 # Java / Maven
 backend/target/
 **/target/
+*.class
+tempCodeRunnerFile.*
 
 # Local uploads and user-generated files
 backend/uploads/

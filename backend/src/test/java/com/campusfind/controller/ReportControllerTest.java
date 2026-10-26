@@ -23,14 +23,20 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import com.campusfind.config.SecurityConfig;
+import com.campusfind.config.WebCorsConfig;
+import org.springframework.context.annotation.Import;
 
 /**
  * Controller integration tests for /api/reports endpoints.
  */
 @WebMvcTest(ReportController.class)
+@Import({SecurityConfig.class, WebCorsConfig.class})
 class ReportControllerTest {
 
     @Autowired
@@ -72,6 +78,7 @@ class ReportControllerTest {
         when(reportService.createReport(any(ReportCreateRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -89,6 +96,7 @@ class ReportControllerTest {
         // Missing required fields: type, itemName, category, description, location, incidentDate
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -114,6 +122,7 @@ class ReportControllerTest {
         );
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -135,6 +144,7 @@ class ReportControllerTest {
         request.setImageUrl("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -277,6 +287,7 @@ class ReportControllerTest {
                 """;
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEnumJson))
                 .andExpect(status().isBadRequest())
@@ -291,6 +302,7 @@ class ReportControllerTest {
         String malformedJson = "{ \"type\": \"LOST\", \"itemName\": ";
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(malformedJson))
                 .andExpect(status().isBadRequest())
@@ -327,6 +339,7 @@ class ReportControllerTest {
         when(reportService.createReport(any(ReportCreateRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -348,6 +361,7 @@ class ReportControllerTest {
         base64Request.setImageUrl("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(base64Request)))
                 .andExpect(status().isBadRequest())
@@ -365,6 +379,7 @@ class ReportControllerTest {
         fileUriRequest.setImageUrl("file:///C:/Users/Admin/secret.jpg");
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(fileUriRequest)))
                 .andExpect(status().isBadRequest())
@@ -382,11 +397,30 @@ class ReportControllerTest {
         traversalRequest.setImageUrl("../../etc/passwd.jpg");
 
         mockMvc.perform(post("/api/reports")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(traversalRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.fieldErrors.imageUrl").exists());
+    }
+
+    @Test
+    @DisplayName("POST /api/reports without CSRF token returns 403 Forbidden")
+    void testCreateReportWithoutCsrfForbidden() throws Exception {
+        ReportCreateRequest request = new ReportCreateRequest(
+                ReportType.LOST,
+                "Keys",
+                "other",
+                "Set of keys",
+                "library",
+                LocalDate.now()
+        );
+
+        mockMvc.perform(post("/api/reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
     }
 }
 

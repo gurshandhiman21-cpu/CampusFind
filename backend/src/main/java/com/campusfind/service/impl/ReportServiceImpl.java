@@ -7,29 +7,36 @@ import com.campusfind.entity.enums.ReportStatus;
 import com.campusfind.entity.enums.ReportType;
 import com.campusfind.exception.ResourceNotFoundException;
 import com.campusfind.repository.ReportRepository;
+import com.campusfind.repository.UserRepository;
 import com.campusfind.service.ReportService;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * Implementation of ReportService providing business logic, validation,
- * server-side report ID generation, and entity-DTO transformations.
+ * server-side report ID generation, entity-DTO transformations, and user association.
  */
 @Service
 @Transactional(readOnly = true)
 public class ReportServiceImpl implements ReportService {
 
     private final ReportRepository reportRepository;
+    private final UserRepository userRepository;
 
-    public ReportServiceImpl(ReportRepository reportRepository) {
+    public ReportServiceImpl(ReportRepository reportRepository, UserRepository userRepository) {
         this.reportRepository = reportRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -61,9 +68,21 @@ public class ReportServiceImpl implements ReportService {
             report.setImageUrl(cleanImageUrl);
         }
 
-        // Security requirement: Authentication is not implemented yet.
-        // Never accept an unauthenticated userId from requests.
-        report.setUser(null);
+        // Associate authenticated user if session exists; keep null for anonymous reports
+        if (userRepository != null) {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken)) {
+                String email = auth.getName();
+                if (email != null && !email.trim().isEmpty()) {
+                    userRepository.findByEmail(email.trim().toLowerCase(Locale.ROOT))
+                            .ifPresent(report::setUser);
+                }
+            } else {
+                report.setUser(null);
+            }
+        } else {
+            report.setUser(null);
+        }
 
         Report saved = reportRepository.save(report);
         return ReportResponse.fromEntity(saved);
