@@ -716,3 +716,343 @@ describe('CampusFind Phase 8B.3 Live Claim and Recovery Flow Verification', () =
         assert.equal(strangerAudit.status, 403, 'Unrelated student must be forbidden (403) from viewing recovery record');
     });
 });
+
+describe('CampusFind Phase 9 Full System Acceptance & Edge Cases Verification', () => {
+
+    const userJar = new CookieJar();
+    const secondUserJar = new CookieJar();
+
+    let userCsrf = null;
+    let secondUserCsrf = null;
+
+    let testFoundReportId = null;
+    let testLostReportId = null;
+
+    const testUser = {
+        fullName: 'Phase9 Student Tester',
+        email: `phase9_user_${Date.now()}@campusfind.test`,
+        password: 'Password123!'
+    };
+
+    const secondUser = {
+        fullName: 'Phase9 Second Tester',
+        email: `phase9_claimant_${Date.now()}@campusfind.test`,
+        password: 'Password123!'
+    };
+
+    async function req(url, options = {}, jar) {
+        const headers = {
+            'Origin': FRONTEND_ORIGIN,
+            ...(options.headers || {})
+        };
+        if (jar && jar.getCookieHeader()) {
+            headers['Cookie'] = jar.getCookieHeader();
+        }
+        const res = await fetch(url, {
+            ...options,
+            headers
+        });
+        if (jar) {
+            jar.update(res);
+        }
+        return res;
+    }
+
+    test('1. Invalid Login Rejection: incorrect password returns 401 Unauthorized', async () => {
+        // Register test user first
+        const csrfRes = await req(`${BACKEND_URL}/auth/csrf`, {}, userJar);
+        const csrfToken = (await csrfRes.json()).token;
+
+        const regRes = await req(`${BACKEND_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            body: JSON.stringify(testUser)
+        }, userJar);
+        assert.equal(regRes.status, 201, 'Registration must succeed');
+
+        // Attempt login with invalid password
+        const badLoginRes = await req(`${BACKEND_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            body: JSON.stringify({ email: testUser.email, password: 'WrongPassword999!' })
+        }, userJar);
+
+        assert.equal(badLoginRes.status, 401, 'Invalid credentials must return 401 Unauthorized');
+        const badLoginData = await badLoginRes.json();
+        assert.equal(badLoginData.status, 401);
+        assert.ok(badLoginData.message.includes('Invalid email or password'));
+    });
+
+    test('2. Successful Login & Session Persistence for Phase 9 Users', async () => {
+        // Login test user
+        const csrf1 = (await (await req(`${BACKEND_URL}/auth/csrf`, {}, userJar)).json()).token;
+        const loginRes1 = await req(`${BACKEND_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf1 },
+            body: JSON.stringify({ email: testUser.email, password: testUser.password })
+        }, userJar);
+        assert.equal(loginRes1.status, 200, 'Test user login must succeed');
+        userCsrf = (await (await req(`${BACKEND_URL}/auth/csrf`, {}, userJar)).json()).token;
+
+        // Register & login second user
+        const csrf2 = (await (await req(`${BACKEND_URL}/auth/csrf`, {}, secondUserJar)).json()).token;
+        await req(`${BACKEND_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf2 },
+            body: JSON.stringify(secondUser)
+        }, secondUserJar);
+
+        const loginRes2 = await req(`${BACKEND_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf2 },
+            body: JSON.stringify({ email: secondUser.email, password: secondUser.password })
+        }, secondUserJar);
+        assert.equal(loginRes2.status, 200, 'Second user login must succeed');
+        secondUserCsrf = (await (await req(`${BACKEND_URL}/auth/csrf`, {}, secondUserJar)).json()).token;
+
+        // Create a FOUND report and a LOST report by testUser
+        const foundReportRes = await req(`${BACKEND_URL}/reports`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': userCsrf },
+            body: JSON.stringify({
+                type: 'FOUND',
+                itemName: 'Phase 9 Calculator Found',
+                category: 'electronics',
+                location: 'Physics Lecture Hall 1',
+                incidentDate: '2026-10-27',
+                incidentTime: '10:00',
+                description: 'TI-84 Plus graphing calculator left in physics hall.'
+            })
+        }, userJar);
+        assert.equal(foundReportRes.status, 201);
+        testFoundReportId = (await foundReportRes.json()).reportId;
+
+        const lostReportRes = await req(`${BACKEND_URL}/reports`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': userCsrf },
+            body: JSON.stringify({
+                type: 'LOST',
+                itemName: 'Phase 9 Backpack Lost',
+                category: 'bags',
+                location: 'Student Cafeteria',
+                incidentDate: '2026-10-27',
+                incidentTime: '11:00',
+                description: 'Black SwissGear backpack lost in cafeteria.'
+            })
+        }, userJar);
+        assert.equal(lostReportRes.status, 201);
+        testLostReportId = (await lostReportRes.json()).reportId;
+    });
+
+    test('3. Self-Claim Rejection: Finder cannot claim item they reported finding (400 Bad Request)', async () => {
+        const selfClaimRes = await req(`${BACKEND_URL}/reports/${testFoundReportId}/claims`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': userCsrf
+            },
+            body: JSON.stringify({
+                explanation: 'I am claiming the item I found myself.',
+                verificationDetails: 'Some secret marking'
+            })
+        }, userJar);
+
+        assert.equal(selfClaimRes.status, 400, 'Self-claim submission must return 400 Bad Request');
+        const selfClaimData = await selfClaimRes.json();
+        assert.ok(selfClaimData.message.includes('cannot submit an ownership claim on an item that you reported finding'));
+    });
+
+    test('4. Claim on LOST Report Rejection: Claims only permitted for FOUND items (400 Bad Request)', async () => {
+        const lostClaimRes = await req(`${BACKEND_URL}/reports/${testLostReportId}/claims`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': secondUserCsrf
+            },
+            body: JSON.stringify({
+                explanation: 'Trying to claim an item that was reported lost.',
+                verificationDetails: 'Invalid claim target'
+            })
+        }, secondUserJar);
+
+        assert.equal(lostClaimRes.status, 400, 'Claims on LOST items must return 400 Bad Request');
+        const lostClaimData = await lostClaimRes.json();
+        assert.ok(lostClaimData.message.includes('Claims can only be submitted for found items'));
+    });
+
+    test('5. Claim Withdrawal: Claimant can withdraw their pending claim (200 OK)', async () => {
+        // Second user submits claim on testFoundReportId
+        const claimRes = await req(`${BACKEND_URL}/reports/${testFoundReportId}/claims`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': secondUserCsrf
+            },
+            body: JSON.stringify({
+                explanation: 'I left my TI-84 calculator in physics lecture hall.',
+                verificationDetails: 'Batteries are rechargeable Energizer AAA.'
+            })
+        }, secondUserJar);
+        assert.equal(claimRes.status, 201);
+        const claimData = await claimRes.json();
+        const withdrawClaimId = claimData.id;
+
+        // Second user withdraws their claim
+        const withdrawRes = await req(`${BACKEND_URL}/claims/${withdrawClaimId}/withdraw`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': secondUserCsrf
+            }
+        }, secondUserJar);
+
+        assert.equal(withdrawRes.status, 200, 'Withdrawal must return 200 OK');
+        const withdrawnData = await withdrawRes.json();
+        assert.equal(withdrawnData.status, 'WITHDRAWN', 'Claim status must transition to WITHDRAWN');
+
+        // Verify withdrawal cannot be repeated
+        const repeatWithdraw = await req(`${BACKEND_URL}/claims/${withdrawClaimId}/withdraw`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': secondUserCsrf
+            }
+        }, secondUserJar);
+        assert.equal(repeatWithdraw.status, 400, 'Withdrawing non-pending claim must return 400 Bad Request');
+    });
+
+    test('6. Recovery with Non-Approved Claim Rejection: Cannot handover with PENDING claim (400 Bad Request)', async () => {
+        // Second user submits a new claim
+        const newClaimRes = await req(`${BACKEND_URL}/reports/${testFoundReportId}/claims`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': secondUserCsrf
+            },
+            body: JSON.stringify({
+                explanation: 'Submitting fresh claim for the calculator.',
+                verificationDetails: 'Serial number SN-987654.'
+            })
+        }, secondUserJar);
+        assert.equal(newClaimRes.status, 201);
+        const newClaim = await newClaimRes.json();
+
+        // Finder tries to record recovery using the PENDING claim (not yet approved)
+        const prematureRecovery = await req(`${BACKEND_URL}/reports/${testFoundReportId}/recovery`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': userCsrf
+            },
+            body: JSON.stringify({
+                claimId: newClaim.id,
+                recoveryDate: '2026-10-27',
+                notes: 'Attempting handover before approval'
+            })
+        }, userJar);
+
+        assert.equal(prematureRecovery.status, 400, 'Recovery with unapproved claim must return 400 Bad Request');
+        const recoveryErr = await prematureRecovery.json();
+        assert.ok(recoveryErr.message.includes('has not been approved'));
+
+        // Now approve the claim
+        const approveRes = await req(`${BACKEND_URL}/claims/${newClaim.id}/review`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': userCsrf
+            },
+            body: JSON.stringify({
+                status: 'APPROVED',
+                reviewNotes: 'Verified serial number matches.'
+            })
+        }, userJar);
+        assert.equal(approveRes.status, 200);
+
+        // Record successful recovery
+        const validRecovery = await req(`${BACKEND_URL}/reports/${testFoundReportId}/recovery`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': userCsrf
+            },
+            body: JSON.stringify({
+                claimId: newClaim.id,
+                recoveryDate: '2026-10-27',
+                notes: 'Handover complete in math lab'
+            })
+        }, userJar);
+        assert.equal(validRecovery.status, 201);
+    });
+
+    test('7. Duplicate Recovery Rejection: Cannot record recovery on already RECOVERED report (400 Bad Request)', async () => {
+        const dupRecovery = await req(`${BACKEND_URL}/reports/${testFoundReportId}/recovery`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': userCsrf
+            },
+            body: JSON.stringify({
+                recoveryDate: '2026-10-27',
+                notes: 'Duplicate handover attempt'
+            })
+        }, userJar);
+
+        assert.equal(dupRecovery.status, 400, 'Duplicate recovery must return 400 Bad Request');
+        const dupRecoveryData = await dupRecovery.json();
+        assert.ok(dupRecoveryData.message.includes('already exists for this report'));
+    });
+
+    test('8. Claim on RECOVERED Report Rejection: Cannot claim an already RECOVERED item (400 Bad Request)', async () => {
+        const lateClaim = await req(`${BACKEND_URL}/reports/${testFoundReportId}/claims`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': secondUserCsrf
+            },
+            body: JSON.stringify({
+                explanation: 'Attempting to claim an item that is already recovered.',
+                verificationDetails: 'Late claim attempt'
+            })
+        }, secondUserJar);
+
+        assert.equal(lateClaim.status, 400, 'Claiming recovered item must return 400 Bad Request');
+        const lateClaimData = await lateClaim.json();
+        assert.ok(lateClaimData.message.includes('not open for claims'));
+    });
+
+    test('9. Search and Filter Querying: type, status, and category filtering work correctly', async () => {
+        const lostListRes = await req(`${BACKEND_URL}/reports?type=LOST`);
+        assert.equal(lostListRes.status, 200);
+        const lostList = await lostListRes.json();
+        assert.ok(Array.isArray(lostList));
+        for (const r of lostList) {
+            assert.equal(r.type, 'LOST', 'Every item in ?type=LOST must be LOST');
+        }
+
+        const foundListRes = await req(`${BACKEND_URL}/reports?type=FOUND`);
+        assert.equal(foundListRes.status, 200);
+        const foundList = await foundListRes.json();
+        assert.ok(Array.isArray(foundList));
+        for (const r of foundList) {
+            assert.equal(r.type, 'FOUND', 'Every item in ?type=FOUND must be FOUND');
+        }
+
+        const openListRes = await req(`${BACKEND_URL}/reports?status=OPEN`);
+        assert.equal(openListRes.status, 200);
+        const openList = await openListRes.json();
+        assert.ok(Array.isArray(openList));
+        for (const r of openList) {
+            assert.equal(r.status, 'OPEN', 'Every item in ?status=OPEN must be OPEN');
+        }
+    });
+
+    test('10. Public Report 404 Handling: non-existent ID returns 404 Not Found JSON error', async () => {
+        const nonExistentRes = await req(`${BACKEND_URL}/reports/NON-EXISTENT-REPORT-ID-9999`);
+        assert.equal(nonExistentRes.status, 404, 'Non-existent report ID must return 404 Not Found');
+        const err = await nonExistentRes.json();
+        assert.equal(err.status, 404);
+        assert.equal(err.error, 'Not Found');
+        assert.ok(err.message.includes('Report not found with identifier: NON-EXISTENT-REPORT-ID-9999'));
+    });
+});
